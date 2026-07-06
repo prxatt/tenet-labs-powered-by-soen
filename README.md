@@ -2,39 +2,91 @@
 
 > The umbrella is **Tenet Labs**. Only the hardware is called **Tenet Sense**. This app is the pre-upgraded SOEN mini-app prototype (main private repo: github.com/prxatt/SOEN · this prototype: github.com/prxatt/tenet-labs-powered-by-soen).
 
-Personal planning web app for Pratt — boxing camp, TENET Boxing build, TENET Sense hobby lab, life habits. Single-file, zero build step.
+Personal planning web app for Pratt — boxing camp, TENET Boxing build, TENET Sense hobby lab, life habits.
 
-## v6 — structure
-- **Rhythm** (home): calendar + score + health + fuel-of-the-day + done/outstanding + capture + build tracker, one page.
-- **Fuel**: recipes categorized breakfast / lunch / dinner / snacks, chicken-forward high-protein rotation.
-- **Roadmap**: TENET Boxing / Sense plans, filming rig, pipeline, Claude Code first prompt, progress expectations.
-- Slash command is a floating glass dock at the bottom — calendar events only (`/` to focus).
-- Liquid-glass UI (iOS 27 direction), transitive-cluster overlap lanes in the day timeline (no more collisions/cutoffs).
+**Live:** [tenet-labs-powered-by-soen.vercel.app](https://tenet-labs-powered-by-soen.vercel.app)  
+**Legacy v6 fallback (no build):** `/legacy-v6.html` on the same domain.
+
+## v7 — Vite + React + Supabase
+
+| Layer | What |
+|-------|------|
+| **UI** | Vite + React 19 + TypeScript — `src/ui/` |
+| **Core** | Platform-agnostic logic in `src/core/` (React Native reuses this unchanged) |
+| **Sync** | Supabase magic-link auth + `plan_state` jsonb row per user |
+| **Secrets** | Oura / Gemini / Groq keys in `user_secrets` — write-only from browser, read by serverless only |
+| **API** | `api/soen.ts` — one Vercel function proxies Oura + AI |
+
+### Pages
+- **Rhythm** — dashboard + integrated day/week/month calendar, scores, health, fuel-of-the-day, done/outstanding, capture, record-today checklist, slash dock (events + `recipe:`)
+- **Fuel** — breakfast / lunch / dinner / snacks recipes, AI recipe creation into your FuelStack
+- **Roadmap** — visual phase timeline, pipeline animation, camera rig, Saturday lab steps, Claude Code prompt
+
+### Features
+- Edit any event (title, notes, day, time, length, color) — base blocks use an `edits` overlay
+- Overlap-safe timeline — transitive cluster lanes + tap-to-expand full width
+- Drag cards between days · drag/tap day headers to swap whole days
+- Cross-device sync when signed in (magic link)
+- Local-only mode still works with zero backend config
+
+## Local development
+
+```bash
+npm install
+npm run dev          # http://localhost:5183
+npm run build        # tsc + vite → dist/
+```
+
+Copy `.env.example` → `.env.local` and add your Supabase URL + anon key for sync testing.
+
+Without Supabase env vars the app runs in **local-only mode** — same as v6, keys stored in browser localStorage.
 
 ## Deploy (GitHub → Vercel)
-1. Repo: `github.com/prxatt/tenet-labs-powered-by-soen` — this folder pushes there (`git push`).
-2. vercel.com → Add New Project → Import the repo → Deploy (no settings needed — static).
-3. Every future `git push` auto-redeploys.
-4. iPhone/iPad: open the URL in Safari → Share → **Add to Home Screen** → full-screen app. Mac: Safari → File → Add to Dock.
 
-## API keys — clarity
-- **Oura**: only a **Personal Access Token** (cloud.ouraring.com → Personal Access Tokens). No client secret needed — ID+secret are for OAuth multi-user apps only.
-- **Gemini**: separate key from aistudio.google.com (free tier is enough).
-- Keys are **not interchangeable** between services. Enter both in the app's Settings, once per device.
-- Storage: keys are AES-256-GCM encrypted at rest; the encryption key is a non-extractable CryptoKey in the browser's IndexedDB. Nothing is ever committed to this repo. You are never logged out.
+1. Push to `github.com/prxatt/tenet-labs-powered-by-soen`
+2. Vercel auto-deploys on every push (framework: Vite, output: `dist/`)
+3. Add these **Vercel environment variables** (Project → Settings → Environment Variables):
 
-## Cross-device
-Oura + Gemini data follow you via their clouds. Local edits (moves, done-marks, logs) are per-device; use Settings → Export/Import backup to carry them over. A true free realtime sync needs a backend — that's the React Native version's job.
+| Variable | Where | Scope |
+|----------|-------|-------|
+| `VITE_SUPABASE_URL` | Supabase → Project Settings → API | Production + Preview |
+| `VITE_SUPABASE_ANON_KEY` | same | Production + Preview |
+| `SUPABASE_URL` | same URL | Production + Preview |
+| `SUPABASE_SERVICE_ROLE_KEY` | same page (service role — never expose to client) | Production + Preview |
 
-## Claude Code migration path
-Open this folder in Claude Code (`claude` in the repo directory). Suggested evolution:
-1. Split `index.html` → `src/` (extract CSS/JS), add Vite. 2. Add a tiny Vercel serverless function to proxy Oura/Gemini so keys move to env vars (`OURA_TOKEN`, `GEMINI_API_KEY` in Vercel project settings). 3. Add Vercel KV or Supabase free tier for cross-device state. 4. Port screens to React Native (Expo) — the data model (blocks/moves/done/logs) transfers as-is.
+4. Run [`supabase/schema.sql`](supabase/schema.sql) once in Supabase SQL editor
+5. iPhone: Safari → Share → **Add to Home Screen**
 
-## Separate future app: Sense Logger
-Own repo + own Claude Code project. Scope: record gym sessions (camera), tag/browse clips, run pose pipeline results, later ingest ESP32/LSM6DSOX IMU streams. Keep this planner app and the logger separate — planner = SOEN prototype, logger = TENET Sense capture tool.
+## Backend setup (one time)
 
-## Local AI (offline / flights)
-Run `OLLAMA_ORIGINS="*" ollama serve` + `ollama pull llama3.2` on the MacBook Pro, enable Local AI in Settings. Provider chain: Ollama → Groq → Gemini — the app works fully offline for planning + AI parsing when local is on. This mirrors the iOS 27 on-device direction; when the React Native build lands, swap the Ollama call for Apple's on-device model API.
+1. Supabase project → Authentication → enable Email provider
+2. SQL editor → paste and run `supabase/schema.sql`
+3. In the app: Settings → enter email → magic link → sign in
+4. Settings → paste Oura + Gemini (+ optional Groq) keys → **Save keys** (stored server-side)
+5. Plan state syncs automatically; green dot in header = cloud sync active
 
-## GitHub build tracker
-Settings → add `user/tenet-boxing-repo` and `prxatt/SOEN`. Public repos need no token; private repos need step 2 (serverless proxy with a GitHub PAT in Vercel env vars).
+## API keys
+
+- **Oura**: Personal Access Token only (cloud.ouraring.com). No OAuth client secret needed.
+- **Gemini**: aistudio.google.com free tier
+- **Groq** (optional): console.groq.com — faster free inference
+- Keys are **not interchangeable** between services
+- When signed in: keys never touch the browser after save
+- When not signed in: keys stored locally (v6 behavior)
+
+## AI provider chain
+
+1. Ollama localhost (if enabled in Settings) — works offline on flights
+2. Serverless Groq → Gemini (when signed in + keys saved)
+3. Local browser keys (fallback)
+
+## React Native path
+
+`src/core/` has zero React/DOM imports. When you start Expo:
+- Import `store`, `schedule`, `scoring`, `sync`, `api` from core
+- Rebuild `src/ui/` as React Native screens
+- Same Supabase tables and `api/soen.ts` endpoint
+
+## Separate future app: Tenet Sense Logger
+
+Own repo for hardware capture + vision pipeline. This planner stays separate.
