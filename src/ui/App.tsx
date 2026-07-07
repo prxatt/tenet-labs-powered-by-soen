@@ -38,7 +38,7 @@ export default function App() {
   const touch = useTouchDevice();
   const [loaded, setLoaded] = useState(false);
   const [tab, setTab] = useState<Tab>(() =>
-    typeof window !== 'undefined' && window.matchMedia('(max-width: 1024px)').matches ? 'plan' : 'plan',
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 1024px)').matches ? 'plan' : 'rhythm',
   );
   const [seg, setSeg] = useState<PlanSeg>('day');
   const [cur, setCur] = useState<Date>(() => clampToCamp(new Date()));
@@ -90,7 +90,7 @@ export default function App() {
   const goToDate = (d: Date) => {
     setCur(clampToCamp(d));
     setSeg('day');
-    setTab(touch ? 'plan' : 'plan');
+    setTab('plan');
   };
   const openSheet = (s: SheetReq) => setSheet(s);
   const isGymDay = [1, 3, 4, 5].includes(new Date().getDay());
@@ -101,7 +101,7 @@ export default function App() {
       <div id="amb"><i className="a1" /><i className="a2" /><i className="a3" /></div>
       {!loaded && <Loader onDone={() => setLoaded(true)} />}
       <div
-        className={'app' + (touch && tab === 'plan' ? ' app-plan-mobile' : '')}
+        className={'app' + (tab === 'plan' ? ' app-plan-mobile' : '')}
         data-tab={tab}
         data-touch={touch ? '1' : '0'}
       >
@@ -113,7 +113,7 @@ export default function App() {
           </div>
         </div>
 
-        <GreetingBar tab={tab} touch={touch} />
+        <GreetingBar tab={tab} />
 
         {atGym && isGymDay && (
           <div id="gymBanner">
@@ -127,21 +127,19 @@ export default function App() {
         )}
 
         <div className="tabs">
-          {touch && (
-            <button className={'tab' + (tab === 'rhythm' ? ' on' : '')} onClick={() => setTab('rhythm')}><IcWave />Rhythm</button>
-          )}
+          <button className={'tab' + (tab === 'rhythm' ? ' on' : '')} onClick={() => setTab('rhythm')}><IcWave />Rhythm</button>
           <button className={'tab tab-plan' + (tab === 'plan' ? ' on' : '')} onClick={() => setTab('plan')}><IcCal />Plan</button>
           <button className={'tab' + (tab === 'fuel' ? ' on' : '')} onClick={() => setTab('fuel')}><IcFuel />Fuel</button>
           <button className={'tab' + (tab === 'roadmap' ? ' on' : '')} onClick={() => setTab('roadmap')}><IcRoad />Roadmap</button>
         </div>
 
         <div className={'view' + (tab === 'rhythm' ? ' on' : '')}>
-          {tab === 'rhythm' && touch && <RhythmPage cur={today} openSheet={openSheet} />}
+          {tab === 'rhythm' && <RhythmPage cur={today} openSheet={openSheet} />}
         </div>
         <div className={'view' + (tab === 'plan' ? ' on' : '')}>
           {tab === 'plan' && (
             <div className="plan-shell">
-              <PlanPage cur={cur} seg={seg} setSeg={setSeg} setCur={setCur} openSheet={openSheet} calendarOnly={touch} />
+              <PlanPage cur={cur} seg={seg} setSeg={setSeg} setCur={setCur} openSheet={openSheet} calendarOnly />
             </div>
           )}
         </div>

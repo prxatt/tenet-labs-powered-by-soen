@@ -17,17 +17,29 @@ function scoreLabel(n: number | null): string {
   return 'Go easy';
 }
 
-export default function GreetingBar({ tab, touch = false }: { tab: 'rhythm' | 'plan' | 'fuel' | 'roadmap'; touch?: boolean }) {
+function ouraSummary(o: { r?: number | null; s?: number | null; hrv?: number | null; rhr?: number | null; st?: number | null }): string | null {
+  const parts: string[] = [];
+  if (o.r != null) parts.push(`Readiness ${o.r}`);
+  if (o.s != null) parts.push(`Sleep ${o.s}`);
+  if (o.hrv != null) parts.push(`HRV ${o.hrv}ms`);
+  if (o.rhr != null) parts.push(`RHR ${o.rhr}bpm`);
+  if (o.st != null) parts.push(`Stress ${['Low', 'Med', 'High'][o.st] ?? '—'}`);
+  return parts.length ? parts.join(' · ') : null;
+}
+
+export default function GreetingBar({ tab }: { tab: 'rhythm' | 'plan' | 'fuel' | 'roadmap' }) {
   const { plan, oura } = useApp();
   const today = new Date();
   const sc = soenScore(today, plan, oura);
   const k = key(today);
+  const o = oura[k] || {};
   const B = blocksFor(today, plan);
   const keyBlocks = B.filter(isKey);
   const doneN = keyBlocks.filter(b => plan.done[b.date + '|' + b.id]).length;
   const comp = completion(today, plan);
   const nh = today.getHours() + today.getMinutes() / 60;
   const nxt = B.find(b => b.t > nh && isKey(b) && !plan.done[b.date + '|' + b.id]);
+  const ouraLine = ouraSummary(o);
 
   if (tab === 'fuel') {
     return (
@@ -46,14 +58,7 @@ export default function GreetingBar({ tab, touch = false }: { tab: 'rhythm' | 'p
   if (tab === 'plan') {
     return (
       <div className="greeting-bar">
-        {touch ? (
-          <p className="greeting-sub plan-phase">Week {weekIdx(today) + 1} · {PHASE[weekIdx(today)]} phase</p>
-        ) : (
-          <>
-            <h1 className="plan serif">Plan</h1>
-            <p className="greeting-sub">Week {weekIdx(today) + 1} · {PHASE[weekIdx(today)]} phase</p>
-          </>
-        )}
+        <p className="greeting-sub plan-phase">Week {weekIdx(today) + 1} · {PHASE[weekIdx(today)]} phase</p>
       </div>
     );
   }
@@ -78,6 +83,7 @@ export default function GreetingBar({ tab, touch = false }: { tab: 'rhythm' | 'p
         </h1>
       </div>
       <p className="greeting-sub">{sc.lab}{sc.n == null ? '' : ` · ${scoreLabel(sc.n)}`}</p>
+      {ouraLine && <p className="greeting-oura">{ouraLine}</p>}
       <div className="greeting-rhythm">
         <span><b>{doneN}/{keyBlocks.length}</b> blocks done</span>
         {comp != null && <span>· <b>{comp}%</b> complete</span>}
