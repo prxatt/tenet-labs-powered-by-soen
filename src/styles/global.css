@@ -115,7 +115,97 @@ h1.plan{font-size:1.9rem;font-weight:600;margin-top:12px}
 .dscroll-hint span:nth-child(2){width:22px;opacity:.7}
 .sync-banner{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:8px;padding:10px 12px;border-radius:14px;background:var(--amberbg);border:1px solid rgba(232,161,60,.25);font-size:.68rem;color:#7a5510}
 .sync-banner button{border:0;background:var(--ink);color:#fff;font-weight:800;font-size:.64rem;padding:7px 12px;border-radius:100px;cursor:pointer;flex:0 0 auto}
-.rhythm-dash{display:flex;flex-direction:column;gap:14px}
+.rhythm-dash{display:flex;flex-direction:column;gap:12px;margin-top:4px}
+.greeting-bar-rhythm{margin-bottom:2px}
+.greeting-ring-lg{width:40px;height:40px;flex:0 0 40px}
+.greeting-ring-lg .greeting-ring-n{font-size:.62rem}
+.greeting-copy{display:flex;flex-direction:column;align-items:flex-start;gap:6px;min-width:0}
+.greeting-bar-rhythm .greeting-title{font-size:1.65rem;margin:0}
+.greeting-bar-rhythm .greeting-oura{margin-top:0;font-size:.66rem;font-weight:600;color:var(--sub)}
+.rhythm-hero{display:block;width:100%;text-align:left;border:1px solid var(--gline);outline:1px solid var(--line);outline-offset:-1px;border-radius:20px;padding:18px 20px;background:linear-gradient(145deg,#fffefb 0%,#f4f1e8 100%);box-shadow:var(--gsh);cursor:pointer;transition:transform .3s var(--spring),box-shadow .3s;font:inherit;color:inherit}
+.rhythm-hero:hover{transform:translateY(-2px);box-shadow:0 14px 40px rgba(60,55,40,.1)}
+.rhythm-hero-done{cursor:default;background:var(--glass)}
+.rhythm-hero-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.rhythm-eyebrow{font-size:.62rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--sub);margin:0}
+.rhythm-hero-title{font-size:1.35rem;font-weight:600;line-height:1.25;margin:10px 0 6px}
+.rhythm-hero-meta{font-size:.74rem;color:var(--sub);font-weight:600;margin:0}
+.rhythm-hero-sub{font-size:.68rem;color:var(--dim);margin:6px 0 0}
+.rhythm-soen{background:var(--greenbg);border:1px solid rgba(79,122,88,.15);border-radius:18px;padding:14px 16px}
+.rhythm-soen-text{font-size:.76rem;line-height:1.55;color:#2d4a34;margin:0}
+.rhythm-soen-text b{color:var(--green)}
+.rhythm-soen-btn{margin-top:10px;border:0;background:var(--ink);color:#fff;font-weight:800;font-size:.68rem;padding:9px 16px;border-radius:100px;cursor:pointer}
+.rhythm-oura-strip{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:4px 2px}
+.rhythm-oura-cell{flex:1 1 auto;min-width:72px;background:var(--card2);border:1px solid var(--line);border-radius:14px;padding:8px 12px}
+.rhythm-oura-cell small{display:block;font-size:.56rem;font-weight:800;color:var(--sub);text-transform:uppercase;letter-spacing:.06em}
+.rhythm-oura-cell b{font-size:.82rem;color:var(--ink)}
+.rhythm-oura-empty{flex:1;font-size:.68rem;color:var(--sub);margin:0}
+.rhythm-oura-sync{border:1px solid var(--line);background:var(--card);border-radius:50%;width:34px;height:34px;cursor:pointer;color:var(--green);font-weight:800;flex:0 0 34px}
+.rhythm-sync-err{width:100%;font-size:.64rem;color:#8f3d31;margin:0}
+.rhythm-card{padding:16px 18px;border-radius:20px}
+.rhythm-card-title{font-size:.62rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--sub);margin:0 0 12px}
+.rhythm-section-label{display:block;font-size:.58rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);margin:10px 0 6px}
+.rhythm-next-row{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;text-align:left;border:1px solid var(--line);background:var(--card2);border-radius:16px;padding:12px 14px;margin-bottom:8px;cursor:pointer;font:inherit;color:inherit;transition:transform .2s var(--spring)}
+.rhythm-next-row:hover{transform:scale(1.01)}
+.rhythm-next-now{background:var(--greenbg);border-color:rgba(79,122,88,.2)}
+.rhythm-next-main{min-width:0;flex:1}
+.rhythm-next-main b{display:block;font-size:.78rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rhythm-next-main small{display:block;font-size:.64rem;color:var(--sub);margin-top:2px}
+.rhythm-tag{font-size:.56rem;font-weight:800;padding:4px 10px;border-radius:100px;background:var(--card);border:1px solid var(--line);color:var(--sub);flex:0 0 auto}
+.rhythm-tag-tGreen,.rhythm-tag-tGreen2{background:var(--greenbg);color:var(--green);border-color:transparent}
+.rhythm-tag-tRed{background:var(--redbg);color:#8f3d31;border-color:transparent}
+.rhythm-tag-tBlue{background:var(--bluebg);color:var(--blue);border-color:transparent}
+.rhythm-focus-goal{margin-top:14px;padding-top:12px;border-top:1px dashed var(--line2);font-size:.66rem;color:var(--sub);font-weight:700;display:grid;gap:6px}
+.rhythm-focus-goal .pbar{margin-top:2px}
+.rhythm-insights{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:720px){.rhythm-insights{grid-template-columns:1fr}}
+.rhythm-insight-card{min-height:0}
+.rhythm-insight-sub{font-size:.72rem;color:var(--sub);line-height:1.5;margin:0 0 10px}
+.rhythm-chart-wrap{margin-top:4px}
+.rhythm-chart{width:100%;height:72px;display:block}
+.rhythm-chart-fill{fill:rgba(79,122,88,.12)}
+.rhythm-chart-line{stroke:var(--green2)}
+.rhythm-chart-dot{fill:var(--amber)}
+.rhythm-chart-labels{display:flex;justify-content:space-between;font-size:.52rem;font-weight:800;color:var(--dim);margin-top:4px;padding:0 2px}
+.rhythm-best-for{margin-top:12px}
+.rhythm-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.rhythm-chip{font-size:.62rem;font-weight:800;padding:5px 12px;border-radius:100px;background:var(--card2);border:1px solid var(--line);color:var(--ink)}
+.rhythm-stress-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.rhythm-stress-level{font-size:1.5rem;font-weight:700;font-family:Georgia,"New York",serif}
+.rhythm-stress-low{color:var(--green)}
+.rhythm-stress-med{color:#8a5b12}
+.rhythm-stress-high{color:#8f3d31}
+.rhythm-stress-na{color:var(--dim)}
+.rhythm-stress-dot{width:10px;height:10px;border-radius:50%;flex:0 0 10px}
+.rhythm-stress-dot-low{background:var(--green2)}
+.rhythm-stress-dot-med{background:var(--amber)}
+.rhythm-stress-dot-high{background:var(--red)}
+.rhythm-stress-factors{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;font-size:.66rem;color:var(--sub)}
+.rhythm-stress-factors ul{list-style:none;margin:4px 0 0;padding:0}
+.rhythm-stress-factors li{padding:3px 0}
+.rhythm-stress-factors li:before{content:"✓ ";color:var(--green);font-weight:800}
+.rhythm-watch li:before{content:"+ ";color:var(--red)}
+.rhythm-week-row{display:flex;justify-content:space-between;gap:6px;margin-bottom:12px}
+.rhythm-week-day{text-align:center;flex:1}
+.rhythm-week-day span{display:block;font-size:.52rem;font-weight:800;color:var(--sub);margin-top:4px}
+.rhythm-week-today span{color:var(--green)}
+.rhythm-week-stats{display:flex;justify-content:space-between;gap:12px;font-size:.68rem;color:var(--sub);margin-bottom:8px}
+.rhythm-week-stats b{display:block;font-size:.9rem;color:var(--ink);margin-top:2px}
+.rhythm-task{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:0;background:transparent;padding:10px 4px;border-bottom:1px solid var(--line);cursor:pointer;font:inherit;color:inherit}
+.rhythm-task:last-of-type{border-bottom:0}
+.rhythm-task-time{font-size:.66rem;font-weight:800;color:var(--sub);min-width:52px;flex:0 0 52px}
+.rhythm-task-title{flex:1;font-size:.76rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rhythm-task-open{font-size:.56rem;font-weight:800;color:#8f3d31;background:var(--redbg);padding:3px 8px;border-radius:100px}
+.rhythm-task-check{color:var(--green);font-weight:800}
+.rhythm-task-done .rhythm-task-title{text-decoration:line-through;color:var(--dim)}
+.rhythm-all-done{font-size:.72rem;color:var(--green);font-weight:700;margin:0}
+.rhythm-toggle-done{border:0;background:none;color:var(--green);font-weight:800;font-size:.66rem;cursor:pointer;padding:8px 0;margin-top:6px}
+.rhythm-rec{border-left:3px solid var(--red)}
+.rhythm-badge{float:right;font-size:.62rem;font-weight:800;color:var(--sub)}
+.rhythm-shot{display:flex;align-items:flex-start;gap:8px;font-size:.7rem;color:var(--sub);padding:6px 0}
+.rhythm-shot-done{text-decoration:line-through;color:var(--dim)}
+.rhythm-more{margin-top:4px}
+.rhythm-more-toggle{width:100%;border:0;background:transparent;color:var(--sub);font-weight:800;font-size:.68rem;text-align:left;padding:8px 4px;cursor:pointer}
+.rhythm-more-body{display:flex;flex-direction:column;gap:12px;margin-top:4px}
 .g-day-cal{grid-template-columns:1fr}
 .g-day-cal .tlcard{max-width:100%}
 @media(min-width:1025px){.tab-plan{display:flex}}

@@ -1,6 +1,5 @@
-import { completion, soenScore } from '../core/scoring';
-import { blocksFor, isKey } from '../core/schedule';
-import { fmt, key, PHASE, weekIdx } from '../core/dates';
+import { soenScore } from '../core/scoring';
+import { key, PHASE, weekIdx } from '../core/dates';
 import { useApp } from './hooks';
 
 function timeGreeting(): string {
@@ -33,12 +32,6 @@ export default function GreetingBar({ tab }: { tab: 'rhythm' | 'plan' | 'fuel' |
   const sc = soenScore(today, plan, oura);
   const k = key(today);
   const o = oura[k] || {};
-  const B = blocksFor(today, plan);
-  const keyBlocks = B.filter(isKey);
-  const doneN = keyBlocks.filter(b => plan.done[b.date + '|' + b.id]).length;
-  const comp = completion(today, plan);
-  const nh = today.getHours() + today.getMinutes() / 60;
-  const nxt = B.find(b => b.t > nh && isKey(b) && !plan.done[b.date + '|' + b.id]);
   const ouraLine = ouraSummary(o);
 
   if (tab === 'fuel') {
@@ -64,30 +57,23 @@ export default function GreetingBar({ tab }: { tab: 'rhythm' | 'plan' | 'fuel' |
   }
 
   const pct = sc.n ?? 0;
-  const C = 75.4;
 
   return (
-    <div className="greeting-bar">
+    <div className="greeting-bar greeting-bar-rhythm">
       <div className="greeting-row">
-        <div className="greeting-ring" aria-hidden>
-          <svg width="28" height="28">
-            <circle cx="14" cy="14" r="12" fill="none" stroke="var(--line)" strokeWidth="3" />
-            <circle cx="14" cy="14" r="12" fill="none" stroke="var(--green2)" strokeWidth="3" strokeLinecap="round"
-              strokeDasharray={C} strokeDashoffset={C * (1 - pct / 100)} />
+        <div className="greeting-ring greeting-ring-lg" aria-hidden>
+          <svg width="40" height="40" viewBox="0 0 40 40">
+            <circle cx="20" cy="20" r="17" fill="none" stroke="var(--line)" strokeWidth="3" />
+            <circle cx="20" cy="20" r="17" fill="none" stroke="var(--green2)" strokeWidth="3" strokeLinecap="round"
+              strokeDasharray="107" strokeDashoffset={107 * (1 - pct / 100)} transform="rotate(-90 20 20)" />
           </svg>
           <span className="greeting-ring-n">{sc.n ?? '—'}</span>
         </div>
-        <h1 className="plan serif greeting-title">
-          {timeGreeting()}, Pratt
+        <div className="greeting-copy">
+          <h1 className="plan serif greeting-title">{timeGreeting()}, Pratt</h1>
           {sc.n != null && <span className="greeting-score-pill">{sc.n} · {scoreLabel(sc.n)}</span>}
-        </h1>
-      </div>
-      <p className="greeting-sub">{sc.lab}{sc.n == null ? '' : ` · ${scoreLabel(sc.n)}`}</p>
-      {ouraLine && <p className="greeting-oura">{ouraLine}</p>}
-      <div className="greeting-rhythm">
-        <span><b>{doneN}/{keyBlocks.length}</b> blocks done</span>
-        {comp != null && <span>· <b>{comp}%</b> complete</span>}
-        {nxt && <span className="greeting-next">· Next <b>{nxt.ti}</b> {fmt(nxt.t)}</span>}
+          {ouraLine && <p className="greeting-oura">{ouraLine}</p>}
+        </div>
       </div>
     </div>
   );

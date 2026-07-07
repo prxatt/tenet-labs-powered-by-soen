@@ -1,6 +1,7 @@
 import type { SheetReq } from './App';
 import DateStrip from './DateStrip';
-import DayView, { RhythmDashboard } from './rhythm/DayView';
+import DayView from './rhythm/DayView';
+import RhythmDashboard from './rhythm/RhythmDashboard';
 import WeekView from './rhythm/WeekView';
 import MonthView from './rhythm/MonthView';
 
