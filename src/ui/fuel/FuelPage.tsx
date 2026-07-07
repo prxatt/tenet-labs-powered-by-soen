@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { Recipe } from '../../core/types';
 import { RECIPE_CATS, allRecipes } from '../../core/recipes';
 import { recipePrompt, parseRecipe } from '../../core/ai';
-import { aiCall } from '../../core/api';
+import { aiCall, importRecipe } from '../../core/api';
 import { store } from '../../core/store';
 import { useApp, toast } from '../hooks';
 import type { SheetReq } from '../App';
@@ -21,33 +21,76 @@ export function generateRecipe(request: string): Promise<Recipe | null> {
 export default function FuelPage({ openSheet }: { openSheet: (s: SheetReq) => void }) {
   const { plan } = useApp();
   const [req, setReq] = useState('');
+  const [url, setUrl] = useState('');
   const [busy, setBusy] = useState(false);
+  const [phase, setPhase] = useState('');
+  const fileRef = useRef<HTMLInputElement>(null);
   const R = allRecipes(plan.userRecipes);
+
+  const saveRecipe = (r: Recipe) => {
+    store.addRecipe(r);
+    toast(`Added to ${r.c} — synced across devices`);
+    openSheet({ type: 'recipe', recipe: r });
+  };
 
   const gen = async () => {
     if (!req.trim() || busy) return;
-    setBusy(true);
-    toast('SOEN is writing your recipe…');
+    setBusy(true); setPhase('Writing recipe…');
     const r = await generateRecipe(req.trim());
-    setBusy(false);
+    setBusy(false); setPhase('');
     if (!r) { toast('AI unavailable — add a Groq/Gemini key in Settings'); return; }
-    store.addRecipe(r);
     setReq('');
-    toast(`Added to ${r.c} — synced across devices`);
-    openSheet({ type: 'recipe', recipe: r });
+    saveRecipe(r);
+  };
+
+  const importUrl = async () => {
+    if (!url.trim() || busy) return;
+    setBusy(true); setPhase('Reading link…');
+    const r = await importRecipe({ url: url.trim() });
+    setBusy(false); setPhase('');
+    if (!r) { toast('Could not import — try a direct recipe URL or paste text in Create'); return; }
+    setUrl('');
+    saveRecipe(r);
+  };
+
+  const importPhoto = async (file: File) => {
+    setBusy(true); setPhase('Reading photo…');
+    const b64 = await new Promise<string>((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(String(r.result).split(',')[1] || '');
+      r.onerror = rej;
+      r.readAsDataURL(file);
+    });
+    const r = await importRecipe({ imageBase64: b64, hint: file.name });
+    setBusy(false); setPhase('');
+    if (!r) { toast('Could not read recipe from image'); return; }
+    saveRecipe(r);
   };
 
   return (
     <>
       <div className="card" style={{ marginBottom: 14 }}>
-        <h6 className="lab">ASK SOEN FOR A RECIPE — SAVES STRAIGHT INTO YOUR FUELSTACK</h6>
+        <h6 className="lab">IMPORT RECIPE — LINK, PHOTO, OR INSTAGRAM</h6>
+        <input value={url} onChange={e => setUrl(e.target.value)} placeholder="Paste recipe URL or Instagram link…" style={{ marginTop: 8 }} />
+        <button className="btnP" style={{ marginTop: 8 }} disabled={busy} onClick={() => void importUrl()}>
+          {phase || 'Import from link'}
+        </button>
+        <div style={{ height: 10 }} />
+        <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }}
+          onChange={e => { const f = e.target.files?.[0]; if (f) void importPhoto(f); e.target.value = ''; }} />
+        <button className="btnS" disabled={busy} onClick={() => fileRef.current?.click()}>
+          Upload cookbook page or screenshot
+        </button>
+      </div>
+
+      <div className="card" style={{ marginBottom: 14 }}>
+        <h6 className="lab">CREATE WITH SOEN — OR USE recipe: IN THE DOCK</h6>
         <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-          <input value={req} onChange={e => setReq(e.target.value)} onKeyDown={e => e.key === 'Enter' && gen()}
+          <input value={req} onChange={e => setReq(e.target.value)} onKeyDown={e => e.key === 'Enter' && void gen()}
             placeholder="high-protein chicken katsu, air-fryer" />
           <button style={{ flex: '0 0 auto', border: 0, background: 'var(--ink)', color: '#fff', fontWeight: 800, fontSize: '.68rem', padding: '0 18px', borderRadius: 100, cursor: 'pointer' }}
             onClick={() => void gen()}>{busy ? '…' : 'Create'}</button>
         </div>
-        <p className="hint" style={{ textAlign: 'left', marginTop: 8 }}>Also works from the dock anywhere: <b>recipe: miso salmon bowl</b></p>
       </div>
 
       <div className="card" style={{ marginBottom: 14 }}><h6 className="lab">DAILY RHYTHM — GYM DAY</h6>

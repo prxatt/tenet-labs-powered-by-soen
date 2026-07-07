@@ -38,15 +38,25 @@ export function parseRecipe(answer: string): Recipe {
   };
 }
 
-export function soenContext(st: PlanState, oura: Record<string, OuraDay>, cur: Date): string {
+export function recipeImportPrompt(opts: { url?: string; imageBase64?: string; hint?: string }): string {
+  if (opts.imageBase64) {
+    return `Extract a complete recipe from this food image. Return ONLY JSON: {"c":"Breakfast"|"Lunch"|"Dinner"|"Snacks & Dessert","n":"Name","tag":"Category · X min","mac":"~NNN kcal · NNg P","ing":["…"],"st":["…"]}. ${opts.hint || ''}`;
+  }
+  if (opts.url) {
+    return `Extract a complete recipe from this URL content (may be Instagram, blog, or cookbook site): ${opts.url}. Return ONLY JSON object with keys c,n,tag,mac,ing,st as in recipe schema. ${opts.hint || ''}`;
+  }
+  return recipePrompt(opts.hint || 'imported recipe');
+}
+
+export function soenContext(st: PlanState, oura: Record<string, OuraDay>, cur: Date, behaviorNote?: string): string {
   const last7 = Object.fromEntries(Object.entries(oura).slice(-7));
   const comp = [0, 1, 2, 3, 4, 5, 6].map(i => {
     const d = addD(cur, -6 + i);
     return key(d) + ':' + (completion(d, st) ?? 'na');
   }).join(', ');
-  return `You are SOEN, a calm planning intelligence for Pratt: 34, SF, boxer in 6-wk camp (4 classes/wk Bay Breakers), building TENET Boxing app (launch Sept 2026 w/ iOS 27), TENET Sense hardware hobby, edX AI courses (done: Intro Gen AI, AI for Everyone; now: Prompt Engineering), high-protein chicken-forward diet ~2450kcal/150g protein, partner (movie/date nights protected), Oura user. Last 7 days: ${JSON.stringify(last7)}. Completion by day: ${comp}. Be specific, concise, no fluff.`;
+  return `You are SOEN, a calm planning intelligence for Pratt: 34, SF, boxer in 6-wk camp (4 classes/wk Bay Breakers), building TENET Boxing app (launch Sept 2026 w/ iOS 27), TENET Sense hardware hobby, edX AI courses (done: Intro Gen AI, AI for Everyone; now: Prompt Engineering), high-protein chicken-forward diet ~2450kcal/150g protein, partner (movie/date nights protected), Oura user. Last 7 days: ${JSON.stringify(last7)}. Completion by day: ${comp}.${behaviorNote ? ' Learned patterns: ' + behaviorNote : ''} Be specific, concise, no fluff.`;
 }
 
-export function retunePrompt(st: PlanState, oura: Record<string, OuraDay>, cur: Date): string {
-  return soenContext(st, oura, cur) + ' Task: Based on the data, is the plan too easy, too hard, or right? Propose max 3 concrete adjustments (block, day, change, why). If data is thin, say what to log first.';
+export function retunePrompt(st: PlanState, oura: Record<string, OuraDay>, cur: Date, behaviorNote?: string): string {
+  return soenContext(st, oura, cur, behaviorNote) + ' Task: Based on the data, is the plan too easy, too hard, or right? Propose max 3 concrete adjustments (block, day, change, why). If data is thin, say what to log first.';
 }

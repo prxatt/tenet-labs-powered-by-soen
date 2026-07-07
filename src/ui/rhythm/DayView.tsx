@@ -4,7 +4,7 @@ import { DN, PHASE, addD, fmt, hf, key, weekIdx, CAMP0 } from '../../core/dates'
 import { BFAST, DINNER, MAIN, assignLanes, blocksFor, isKey } from '../../core/schedule';
 import { completion, soenScore } from '../../core/scoring';
 import { findRecipe } from '../../core/recipes';
-import { ghStatus, syncOura, type RepoStatus } from '../../core/api';
+import { ghStatus, syncOura, getOuraError, type RepoStatus } from '../../core/api';
 import { store } from '../../core/store';
 import { useApp, toast } from '../hooks';
 import type { SheetReq } from '../App';
@@ -83,27 +83,14 @@ function Timeline({ cur, openSheet }: { cur: Date; openSheet: (s: SheetReq) => v
 /* ---------------- left column cards ---------------- */
 function ScoreCard({ cur }: { cur: Date }) {
   const { plan, oura } = useApp();
-  const sc = soenScore(cur, plan, oura);
   const w = weekIdx(cur);
   const B = blocksFor(cur, plan);
   const hs = (cl: string[]) => B.filter(b => cl.includes(b.cls)).reduce((a, b) => a + b.dur, 0);
   const compN = completion(cur, plan);
   return (
     <div className="card">
-      <div className="glance">
-        <div className="l"><small>SOEN SCORE — OURA × COMPLETED</small>
-          <div className="opt">{sc.n === null ? 'Fresh day' : sc.n >= 78 ? 'Optimized' : sc.n >= 60 ? 'Manageable' : 'Go easy'}</div>
-          <p>{sc.lab} · Week {w + 1} {PHASE[w]}</p></div>
-        <div className="ring">
-          <svg width="88" height="88">
-            <circle cx="44" cy="44" r="37" fill="none" stroke="var(--line)" strokeWidth="7" />
-            <circle cx="44" cy="44" r="37" fill="none" stroke="var(--green2)" strokeWidth="7" strokeLinecap="round"
-              strokeDasharray="232.5" strokeDashoffset={232.5 * (1 - (sc.n || 0) / 100)} style={{ transition: 'stroke-dashoffset 1.2s' }} />
-          </svg>
-          <div className="c"><b>{sc.n ?? '—'}</b><small>SOEN</small></div>
-        </div>
-      </div>
-      <div className="stat3">
+      <h6 className="lab">TODAY'S RHYTHM · WEEK {w + 1} {PHASE[w]}</h6>
+      <div className="stat3" style={{ marginTop: 10 }}>
         <div className="stat"><small>Work</small><b>{hf(hs(['tGreen', 'tGreen2']))}</b><span>of 40h/wk</span></div>
         <div className="stat"><small>Train+Recover</small><b>{hf(hs(['tRed', 'tBlue', 'tPlum']))}</b><span>incl. travel</span></div>
         <div className="stat"><small>Done</small><b>{compN === null ? '—' : compN + '%'}</b>
@@ -169,6 +156,7 @@ function Suggest({ cur, openSheet }: { cur: Date; openSheet: (s: SheetReq) => vo
 
 function HealthStrip({ cur, openSheet }: { cur: Date; openSheet: (s: SheetReq) => void }) {
   const { oura } = useApp();
+  const [syncErr, setSyncErr] = useState(getOuraError());
   const o = oura[key(cur)] || {};
   const H: [string, string | number | null | undefined][] = [
     ['Readiness', o.r], ['Sleep', o.s], ['HRV', o.hrv ? o.hrv + 'ms' : null], ['RHR', o.rhr ? o.rhr + 'bpm' : null],
@@ -182,11 +170,13 @@ function HealthStrip({ cur, openSheet }: { cur: Date; openSheet: (s: SheetReq) =
           onClick={async e => {
             e.preventDefault(); toast('Syncing Oura…');
             const r = await syncOura();
+            setSyncErr(getOuraError());
             if (r === 'ok') toast('Oura synced — rail + scores updated');
-            else if (r === 'nokey') { toast('Add your Oura token in Settings'); openSheet({ type: 'settings' }); }
-            else toast('Sync failed — check token / network');
+            else if (r === 'nokey' || r === 'no_auth') { toast('Add Oura token in Settings (and sign in on this device)'); openSheet({ type: 'settings' }); }
+            else toast(syncErr || 'Sync failed — check token / network');
           }}>⟳ Force sync</a>
       </h6>
+      {syncErr && <p style={{ fontSize: '.66rem', color: '#8f3d31', marginTop: 4 }}>{syncErr}</p>}
       <div className="hstrip">
         {cells.length ? cells.map(x => <div className="hcell" key={x[0]}><small>{x[0]}</small><b>{x[1]}</b></div>)
           : <p style={{ fontSize: '.68rem', color: 'var(--sub)' }}>Connect Oura in Settings → data appears here after sync.</p>}

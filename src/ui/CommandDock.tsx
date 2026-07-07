@@ -7,7 +7,6 @@ import { toast } from './hooks';
 import { generateRecipe } from './fuel/FuelPage';
 import type { SheetReq } from './App';
 
-/** Regex fallback when no AI is configured. */
 function localParse(text: string, cur: Date): { ti: string; date: string; t: number; dur: number } | null {
   let d = new Date(cur);
   const low = text.toLowerCase();
@@ -36,8 +35,19 @@ function localParse(text: string, cur: Date): { ti: string; date: string; t: num
   return { ti: ti ? ti[0].toUpperCase() + ti.slice(1) : 'Event', date: key(d), t: h, dur };
 }
 
-export default function CommandDock({ cur, goToDate, openSheet }: {
+function isRecipeCmd(text: string): string | null {
+  const m = text.match(/^(?:recipe:|\/recipe\s*|\/recipe:)\s*(.+)/i);
+  return m ? m[1].trim() : null;
+}
+
+function isPlanCmd(text: string): string | null {
+  const m = text.match(/^plan:\s*(.+)/i);
+  return m ? m[1].trim() : null;
+}
+
+export default function CommandDock({ cur, goToDate, openSheet, onSoen }: {
   cur: Date; goToDate: (d: Date) => void; openSheet: (s: SheetReq) => void;
+  onSoen: (question: string) => void;
 }) {
   const [v, setV] = useState('');
   const [busy, setBusy] = useState(false);
@@ -64,31 +74,9 @@ export default function CommandDock({ cur, goToDate, openSheet }: {
     }));
   };
 
-  const run = async () => {
-    const text = v.trim();
-    if (!text || busy) return;
-    setV('');
-
-    if (/^soen:/i.test(text)) {
-      const q = text.replace(/^soen:\s*/i, '').trim();
-      if (!q) { toast('Type a question after soen: — e.g. soen: how should I train today?'); return; }
-      openSheet({ type: 'ask', prefill: q });
-      return;
-    }
-
-    if (/^recipe:/i.test(text)) {
-      setBusy(true); toast('SOEN is writing your recipe…');
-      const r = await generateRecipe(text.replace(/^recipe:\s*/i, ''));
-      setBusy(false);
-      if (!r) { toast('AI unavailable — add a Groq/Gemini key in Settings'); return; }
-      store.addRecipe(r);
-      toast(`Recipe added to ${r.c} in Fuel — synced`);
-      openSheet({ type: 'recipe', recipe: r });
-      return;
-    }
-
+  const runPlan = async (planText: string) => {
     setBusy(true);
-    const a = await aiCall(eventParsePrompt(text, cur));
+    const a = await aiCall(eventParsePrompt(planText, cur));
     setBusy(false);
     if (a) {
       try {
@@ -97,25 +85,55 @@ export default function CommandDock({ cur, goToDate, openSheet }: {
           evs.forEach(ev => addEvent(ev));
           const d0 = new Date(evs[0].date + 'T12:00:00');
           goToDate(d0);
-          toast(`Added ${evs.length} event${evs.length > 1 ? 's' : ''} — ${DN[d0.getDay()]} ${d0.getDate()} · synced`);
+          toast(`Added ${evs.length} event${evs.length > 1 ? 's' : ''} — ${DN[d0.getDay()]} ${d0.getDate()}`);
           return;
         }
-      } catch { /* fall through to local parser */ }
+      } catch { /* fall through */ }
     }
-    const lp = localParse(text, cur);
+    const lp = localParse(planText, cur);
     if (lp) {
       addEvent(lp);
       const d0 = new Date(lp.date + 'T12:00:00');
       goToDate(d0);
-      toast(`Added "${lp.ti}" — ${DN[d0.getDay()]} ${d0.getDate()} · synced`);
-    } else toast('Could not parse — try "coffee with Alex tomorrow 3pm for 1h"');
+      toast(`Added "${lp.ti}" — ${DN[d0.getDay()]} ${d0.getDate()}`);
+    } else toast('Could not parse — try plan: coffee tomorrow 3pm for 1h');
+  };
+
+  const run = async () => {
+    const text = v.trim();
+    if (!text || busy) return;
+    setV('');
+
+    const recipeBody = isRecipeCmd(text);
+    if (recipeBody) {
+      setBusy(true); toast('SOEN is writing your recipe…');
+      const r = await generateRecipe(recipeBody);
+      setBusy(false);
+      if (!r) { toast('AI unavailable — add a Groq/Gemini key in Settings'); return; }
+      store.addRecipe(r);
+      toast(`Recipe added to ${r.c} in Fuel — synced`);
+      openSheet({ type: 'recipe', recipe: r });
+      return;
+    }
+
+    const planBody = isPlanCmd(text);
+    if (planBody) {
+      await runPlan(planBody);
+      return;
+    }
+
+    if (/^soen:\s*/i.test(text)) {
+      const q = text.replace(/^soen:\s*/i, '').trim();
+      if (q) { onSoen(q); return; }
+    }
+
+    onSoen(text);
   };
 
   return (
     <div className="cmdwrap">
       <div id="chips">
-        <span onClick={() => setV('dinner with ')}>＋ dinner…</span>
-        <span onClick={() => setV('soen: ')}>＋ soen:</span>
+        <span onClick={() => setV('plan: ')}>＋ plan:</span>
         <span onClick={() => setV('recipe: ')}>＋ recipe:</span>
         <span onClick={() => openSheet({ type: 'log' })}>＋ log day</span>
         <span onClick={() => openSheet({ type: 'shot' })}>shot list</span>
@@ -123,9 +141,9 @@ export default function CommandDock({ cur, goToDate, openSheet }: {
       </div>
       <div className="cmd">
         <span className="slash">/</span>
-        <input ref={inputRef} value={v} onChange={e => setV(e.target.value)} onKeyDown={e => e.key === 'Enter' && run()}
-          placeholder={busy ? 'SOEN is thinking…' : 'coffee tomorrow 3pm · soen: how should I train? · recipe: katsu'} style={{ flex: 1 }} />
-        <button className="go" onClick={() => void run()}>{busy ? '…' : 'Add'}</button>
+        <input ref={inputRef} value={v} onChange={e => setV(e.target.value)} onKeyDown={e => e.key === 'Enter' && void run()}
+          placeholder={busy ? 'SOEN is thinking…' : 'Ask SOEN… · plan: dinner Fri 7pm · recipe: katsu'} style={{ flex: 1 }} />
+        <button className="go" onClick={() => void run()}>{busy ? '…' : 'Ask'}</button>
       </div>
     </div>
   );

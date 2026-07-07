@@ -84,9 +84,17 @@ class Store {
     this.emit();
   }
 
-  setOura(oura: Record<string, OuraDay>) {
+  setOura(oura: Record<string, OuraDay>, syncPlan = true) {
     this.state = { ...this.state, oura };
     try { localStorage.setItem(LS_OURA, JSON.stringify(oura)); } catch { /* quota */ }
+    if (syncPlan) {
+      this.state = {
+        ...this.state,
+        plan: { ...this.state.plan, ouraData: oura, updatedAt: Date.now() },
+      };
+      try { localStorage.setItem(LS_PLAN, JSON.stringify(this.state.plan)); } catch { /* quota */ }
+      this.onPlanChange?.(this.state.plan);
+    }
     this.emit();
   }
 
@@ -102,6 +110,9 @@ class Store {
       if (done[dk]) delete done[dk]; else done[dk] = 1;
       return { done };
     });
+    void import('./habits').then(({ refreshBehavior }) =>
+      import('./geoLocal').then(({ gymVisitsThisWeek }) => refreshBehavior(gymVisitsThisWeek())),
+    );
   }
 
   addRecipe(r: Recipe) {

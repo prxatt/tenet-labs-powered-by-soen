@@ -81,10 +81,13 @@ export interface PlanState {
   custom: Record<string, CustomEvent[]>;   // date -> user events
   shots: Record<string, Record<number, 1>>;// date -> recording checklist state
   userRecipes: Recipe[];
+  /** Oura daily metrics — syncs cross-device via plan_state */
+  ouraData?: Record<string, OuraDay>;
   prefs: {
     repoA?: string; repoB?: string;
     ollama?: boolean; ollamaModel?: string;
     gymLoc?: { la: number; lo: number } | null;
+    homeLoc?: { la: number; lo: number } | null;
   };
   updatedAt: number;
 }

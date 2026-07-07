@@ -5,6 +5,7 @@
 import { createClient, type SupabaseClient, type Session } from '@supabase/supabase-js';
 import type { PlanState } from './types';
 import { store } from './store';
+import { pullBehavior } from './habits';
 
 const URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const ANON = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
@@ -26,7 +27,6 @@ export async function getSession(): Promise<Session | null> {
   return data.session;
 }
 
-/** Session with refresh fallback — mobile magic links can lag behind UI state. */
 export async function ensureSession(): Promise<Session | null> {
   const s = await getSession();
   if (s) return s;
@@ -53,6 +53,10 @@ export async function signOut() { if (hasSupabase()) await supa().auth.signOut()
 
 let pushTimer: ReturnType<typeof setTimeout> | null = null;
 
+function planForCloud(plan: PlanState): PlanState {
+  return { ...plan, ouraData: store.get().oura };
+}
+
 export async function pullPlan(): Promise<void> {
   const s = await ensureSession();
   if (!s) { store.setSync('local', null); return; }
@@ -65,13 +69,16 @@ export async function pullPlan(): Promise<void> {
     const remoteAt = remote.updatedAt || new Date(data.updated_at).getTime();
     if (remoteAt > (store.get().plan.updatedAt || 0)) {
       store.replacePlan({ ...remote, updatedAt: remoteAt });
+      if (remote.ouraData && Object.keys(remote.ouraData).length) {
+        store.setOura(remote.ouraData, false);
+      }
     } else if ((store.get().plan.updatedAt || 0) > remoteAt) {
       await pushNow(store.get().plan);
     }
   } else {
-    // first device — seed the cloud with local state
     await pushNow(store.get().plan);
   }
+  await pullBehavior();
   store.setSync('ok');
 }
 
@@ -80,7 +87,7 @@ async function pushNow(plan: PlanState): Promise<void> {
   if (!s) return;
   store.setSync('syncing');
   const { error } = await supa().from('plan_state').upsert(
-    { user_id: s.user.id, data: plan, updated_at: new Date().toISOString() },
+    { user_id: s.user.id, data: planForCloud(plan), updated_at: new Date().toISOString() },
     { onConflict: 'user_id' },
   );
   store.setSync(error ? 'err' : 'ok');
@@ -110,7 +117,6 @@ export async function saveSecrets(secrets: { oura?: string; gemini?: string; gro
   return { error: error?.message ?? null };
 }
 
-/** Which secrets exist server-side (names only, never values). */
 export async function secretsStatus(): Promise<{ oura: boolean; gemini: boolean; groq: boolean; github: boolean }> {
   const none = { oura: false, gemini: false, groq: false, github: false };
   const s = await ensureSession();
@@ -122,7 +128,6 @@ export async function secretsStatus(): Promise<{ oura: boolean; gemini: boolean;
   return none;
 }
 
-/** Wire the store's change hook to the debounced cloud push. */
 export function initSync() {
   store.onPlanChange = schedulePush;
   if (!hasSupabase()) { store.setSync('local'); return; }

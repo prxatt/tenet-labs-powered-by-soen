@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { gymVisitsThisWeek } from '../../core/geoLocal';
+import { behaviorSummary } from '../../core/habits';
 import { IcCam, IcJson, IcPath, IcPose, IcTrack, IcViz } from '../Icons';
 import { toast } from '../hooks';
 
@@ -41,6 +43,11 @@ export default function RoadmapPage() {
             </div>
           ))}
         </div>
+      </div>
+
+      <div className="card mt"><h6 className="lab">GOALS — LOCAL (NEVER UPLOADED)</h6>
+        <div className="row"><span className="k">Gym this week</span><span><b>{gymVisitsThisWeek()}</b> / 4 target days (from on-device location log)</span></div>
+        <div className="row"><span className="k">SOEN learned</span><span>{behaviorSummary()}</span></div>
       </div>
 
       <div className="g2 mt">

@@ -6,6 +6,15 @@ import { store } from '../../core/store';
 import { useApp, toast } from '../hooks';
 import Sheet from '../Sheet';
 
+const COOLDOWN_SEC = 60;
+
+function friendlyAuthError(msg: string): string {
+  if (/rate limit|over_email_send_rate_limit/i.test(msg)) {
+    return 'Too many emails — wait ~60 minutes or open an earlier magic link from your inbox.';
+  }
+  return msg;
+}
+
 export default function SettingsSheet({ onClose }: { onClose: () => void }) {
   const app = useApp();
   const prefs = app.plan.prefs;
@@ -16,6 +25,8 @@ export default function SettingsSheet({ onClose }: { onClose: () => void }) {
   const [github, setGithub] = useState('');
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
+  const [emailErr, setEmailErr] = useState('');
   const [session, setSession] = useState<Session | null>(null);
   const [have, setHave] = useState({ oura: !!lk.oura, gemini: !!lk.gemini, groq: !!lk.groq, github: !!lk.github });
   const [repoA, setRepoA] = useState(prefs.repoA || '');
@@ -30,6 +41,12 @@ export default function SettingsSheet({ onClose }: { onClose: () => void }) {
     const { data: { subscription } } = supa().auth.onAuthStateChange((_e, s) => setSession(s));
     return () => subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const t = setInterval(() => setCooldown(c => Math.max(0, c - 1)), 1000);
+    return () => clearInterval(t);
+  }, [cooldown]);
 
   useEffect(() => {
     if (signedIn) void secretsStatus().then(s => setHave(h => ({
@@ -50,7 +67,8 @@ export default function SettingsSheet({ onClose }: { onClose: () => void }) {
     if (s) {
       const { error } = await saveSecrets(payload);
       if (error) { toast('Key save failed: ' + error); return; }
-      toast('Keys saved to your encrypted backend');
+      const st = await secretsStatus();
+      toast('Keys saved to your encrypted backend' + (st.oura ? ' · Oura ✓' : ''));
     } else {
       setLocalKeys(payload);
       toast('Keys saved on this device — open your magic link on this phone to move them server-side');
@@ -74,6 +92,13 @@ export default function SettingsSheet({ onClose }: { onClose: () => void }) {
     navigator.geolocation.getCurrentPosition(p => {
       store.updatePlan(pl => ({ prefs: { ...pl.prefs, gymLoc: { la: p.coords.latitude, lo: p.coords.longitude } } }));
       toast('Gym location saved');
+    }, () => toast('Location permission needed'));
+  };
+
+  const setHomeHere = () => {
+    navigator.geolocation.getCurrentPosition(p => {
+      store.updatePlan(pl => ({ prefs: { ...pl.prefs, homeLoc: { la: p.coords.latitude, lo: p.coords.longitude } } }));
+      toast('Home location saved (local only)');
     }, () => toast('Location permission needed'));
   };
 
@@ -102,15 +127,29 @@ export default function SettingsSheet({ onClose }: { onClose: () => void }) {
     i.click();
   };
 
+  const sendMagicLink = async () => {
+    setEmailErr('');
+    if (!email.includes('@')) { setEmailErr('Enter a valid email'); return; }
+    const { error } = await signInMagic(email.trim());
+    if (error) { toast('Sign-in failed: ' + friendlyAuthError(error)); return; }
+    setSent(true);
+    setCooldown(COOLDOWN_SEC);
+    toast('Magic link sent — open it on this device');
+  };
+
   const K = (k: boolean) => k ? <span style={{ color: 'var(--green)', fontWeight: 800 }}> · saved ✓</span> : null;
   const syncLabel = signedIn
-    ? (app.sync === 'ok' ? 'cloud — ' + (session?.user.email || app.email) : app.sync)
-    : 'this device only';
+    ? (app.sync === 'ok' ? 'Session active — ' + (session?.user.email || app.email) : app.sync)
+    : sent ? 'Link sent — open on this device'
+    : 'This device only';
 
   return (
     <Sheet onClose={onClose}>
       <h3 className="serif">Settings</h3>
-      <div className="sub">Sync: <b>{syncLabel}</b></div>
+      <div className="sub">Sync: <b>{syncLabel}</b>
+        <span className={'syncdot ' + (app.sync === 'ok' ? 'ok' : app.sync === 'err' ? 'err' : 'local')} style={{ display: 'inline-block', marginLeft: 6, verticalAlign: 'middle' }}
+          title={app.sync === 'ok' ? 'Cloud synced' : app.sync === 'local' ? 'Local only' : String(app.sync)} />
+      </div>
 
       <div className="sec"><h6>Account — cross-device sync</h6>
         {!hasSupabase() ? (
@@ -118,15 +157,17 @@ export default function SettingsSheet({ onClose }: { onClose: () => void }) {
         ) : signedIn ? (
           <button className="btnS" onClick={() => { void signOut(); toast('Signed out — local mode'); }}>Sign out ({session?.user.email})</button>
         ) : sent ? (
-          <p style={{ fontSize: '.72rem', color: 'var(--green)', fontWeight: 700 }}>Magic link sent — open it on this device. You will stay signed in.</p>
-        ) : (
+          <p style={{ fontSize: '.72rem', color: 'var(--green)', fontWeight: 700 }}>
+            Magic link sent — open it on this device.{cooldown > 0 ? ` Resend in ${cooldown}s.` : ''}
+          </p>
+        ) : null}
+        {!signedIn && (
           <>
-            <input type="email" placeholder="you@email.com" value={email} onChange={e => setEmail(e.target.value)} />
-            <button className="btnP" onClick={async () => {
-              if (!email.includes('@')) return;
-              const { error } = await signInMagic(email.trim());
-              if (error) toast('Sign-in failed: ' + error); else setSent(true);
-            }}>Email me a magic link</button>
+            <input type="email" placeholder="you@email.com" value={email} onChange={e => { setEmail(e.target.value); setEmailErr(''); }} />
+            {emailErr && <p style={{ fontSize: '.66rem', color: 'var(--red)', marginTop: 4 }}>{emailErr}</p>}
+            <button className="btnP" disabled={cooldown > 0 && sent} onClick={() => void sendMagicLink()}>
+              {cooldown > 0 && sent ? `Resend in ${cooldown}s` : sent ? 'Resend magic link' : 'Email me a magic link'}
+            </button>
           </>
         )}
       </div>
@@ -168,9 +209,13 @@ export default function SettingsSheet({ onClose }: { onClose: () => void }) {
       </div>
       <button className="btnP" onClick={savePrefs}>Save preferences</button>
 
-      <div className="sec"><h6>Location</h6>
+      <div className="sec"><h6>Location (local only — never uploaded)</h6>
         <button className="btnS" onClick={setGymHere}>I'm at the gym now — remember this location</button>
-        <p className="hint" style={{ textAlign: 'left' }}>{prefs.gymLoc ? 'Gym saved ✓ — Gym Mode auto-activates within ~250 m.' : 'Not set. Tap the button while at Bay Breakers once.'}</p>
+        <button className="btnS" onClick={setHomeHere}>I'm home — remember this location</button>
+        <p className="hint" style={{ textAlign: 'left' }}>
+          {prefs.gymLoc ? 'Gym saved ✓ — Gym Mode within ~250 m.' : 'Gym not set.'}
+          {prefs.homeLoc ? ' Home saved ✓.' : ''}
+        </p>
       </div>
 
       <div className="sec"><h6>Backup</h6>

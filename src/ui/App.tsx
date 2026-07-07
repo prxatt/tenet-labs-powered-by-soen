@@ -1,14 +1,18 @@
 import { useEffect, useState } from 'react';
 import type { Block, Recipe } from '../core/types';
-import { CAMP0, CAMP_END, DN, addD, clampToCamp, key, weekIdx, PHASE } from '../core/dates';
-import { blocksFor } from '../core/schedule';
-import { syncOura } from '../core/api';
+import { CAMP0, CAMP_END, DN, addD, clampToCamp, key } from '../core/dates';
+import { getOuraError, syncOura } from '../core/api';
+import { gymVisitsThisWeek, recordGeoSample } from '../core/geoLocal';
+import { refreshBehavior } from '../core/habits';
 import { initSync } from '../core/sync';
 import { store } from '../core/store';
 import { useApp, toast } from './hooks';
 import Loader from './Loader';
 import Toast from './Toast';
 import CommandDock from './CommandDock';
+import GreetingBar from './GreetingBar';
+import LiveChip from './LiveChip';
+import SoenModal from './SoenModal';
 import DayView from './rhythm/DayView';
 import WeekView from './rhythm/WeekView';
 import MonthView from './rhythm/MonthView';
@@ -37,7 +41,9 @@ export default function App() {
   const [seg, setSeg] = useState<Seg>('day');
   const [cur, setCur] = useState<Date>(() => clampToCamp(new Date()));
   const [sheet, setSheet] = useState<SheetReq | null>(null);
+  const [soenQ, setSoenQ] = useState<string | null>(null);
   const [atGym, setAtGym] = useState(false);
+  const ouraErr = getOuraError();
 
   useEffect(() => {
     initSync();
@@ -46,23 +52,27 @@ export default function App() {
     return () => clearInterval(iv);
   }, []);
 
-  // gym proximity check
   useEffect(() => {
     const gl = app.plan.prefs.gymLoc;
-    if (!gl || !navigator.geolocation) return;
+    const hl = app.plan.prefs.homeLoc;
+    if (!navigator.geolocation) return;
     const check = () => navigator.geolocation.getCurrentPosition(p => {
-      const dLa = (p.coords.latitude - gl.la) * 111320;
-      const dLo = (p.coords.longitude - gl.lo) * 111320 * Math.cos(gl.la * Math.PI / 180);
-      setAtGym(Math.hypot(dLa, dLo) < 250);
+      const { latitude: la, longitude: lo } = p.coords;
+      recordGeoSample(la, lo, gl, hl);
+      refreshBehavior(gymVisitsThisWeek());
+      if (gl) {
+        const dLa = (la - gl.la) * 111320;
+        const dLo = (lo - gl.lo) * 111320 * Math.cos(gl.la * Math.PI / 180);
+        setAtGym(Math.hypot(dLa, dLo) < 250);
+      }
     }, () => { /* denied */ }, { maximumAge: 120000 });
     check();
     const iv = setInterval(check, 180000);
     return () => clearInterval(iv);
-  }, [app.plan.prefs.gymLoc]);
+  }, [app.plan.prefs.gymLoc, app.plan.prefs.homeLoc]);
 
   const goToDate = (d: Date) => { setCur(clampToCamp(d)); setTab('rhythm'); setSeg('day'); };
   const openSheet = (s: SheetReq) => setSheet(s);
-  const w = weekIdx(cur);
   const isGymDay = [1, 3, 4, 5].includes(new Date().getDay());
 
   const dayChips = (() => {
@@ -79,23 +89,12 @@ export default function App() {
         <div className="top">
           <div className="brand">TENET LABS<small>POWERED BY SOEN</small></div>
           <div className="right">
-            <span id="geoChip" className={atGym ? 'gym' : ''}>{atGym ? 'AT THE GYM' : 'Wk ' + (w + 1) + ' · ' + PHASE[w]}</span>
-            <span className={'syncdot ' + (app.sync === 'ok' ? 'ok' : app.sync === 'err' ? 'err' : 'local')}
-              title={app.sync === 'ok' ? 'Synced — ' + app.email : app.sync === 'local' ? 'This device only' : app.sync} />
+            <LiveChip atGym={atGym} ouraError={ouraErr} />
             <button className="ava" onClick={() => openSheet({ type: 'settings' })}>P</button>
           </div>
         </div>
 
-        <h1 className="plan serif" id="pageTitle">
-          {tab === 'rhythm'
-            ? (new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 18 ? 'Good afternoon' : 'Good evening') + ', Pratt'
-            : tab === 'fuel' ? 'Fuel' : 'Roadmap'}
-        </h1>
-        <div className="tagline" id="pageTag">
-          {tab === 'rhythm' ? 'Your rhythm — plan, calendar, health, progress. One page.'
-            : tab === 'fuel' ? 'Breakfast · lunch · dinner — recipes, prep, and the protein system.'
-            : 'TENET Boxing · Sense · filming · what the numbers should do.'}
-        </div>
+        <GreetingBar tab={tab} />
 
         {atGym && isGymDay && (
           <div id="gymBanner">
@@ -154,13 +153,15 @@ export default function App() {
         <div className={'view' + (tab === 'roadmap' ? ' on' : '')}>{tab === 'roadmap' && <RoadmapPage />}</div>
       </div>
 
-      {loaded && tab === 'rhythm' && <CommandDock cur={cur} goToDate={goToDate} openSheet={openSheet} />}
+      {loaded && (
+        <CommandDock cur={cur} goToDate={goToDate} openSheet={openSheet} onSoen={q => setSoenQ(q)} />
+      )}
+
+      {soenQ && <SoenModal question={soenQ} onClose={() => setSoenQ(null)} />}
 
       {sheet?.type === 'event' && <EventSheet block={sheet.block} shownOn={sheet.shownOn} onClose={() => setSheet(null)} />}
       {sheet?.type === 'log' && <LogSheet cur={cur} onClose={() => setSheet(null)} />}
-      {(sheet?.type === 'ask' || sheet?.type === 'retune') && (
-        <AskSheet cur={cur} retune={sheet.type === 'retune'} prefill={sheet.type === 'ask' ? sheet.prefill : undefined} onClose={() => setSheet(null)} />
-      )}
+      {sheet?.type === 'retune' && <AskSheet cur={cur} retune onClose={() => setSheet(null)} />}
       {sheet?.type === 'settings' && <SettingsSheet onClose={() => setSheet(null)} />}
       {sheet?.type === 'recipe' && <RecipeSheet recipe={sheet.recipe} onClose={() => setSheet(null)} />}
       {sheet?.type === 'shot' && <ShotListSheet onClose={() => setSheet(null)} />}

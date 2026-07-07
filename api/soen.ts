@@ -108,6 +108,52 @@ export default async function handler(req: any, res: any) {
       return;
     }
 
+    if (body.service === 'recipe_import') {
+      const url = String(body.url || '').trim();
+      const imageBase64 = String(body.imageBase64 || '').slice(0, 8_000_000);
+      const hint = String(body.hint || '');
+      if (!url && !imageBase64) { res.status(400).json({ error: 'no_input' }); return; }
+      if (!secrets?.gemini_key) { res.status(200).json({ error: 'no_ai_key' }); return; }
+
+      let content = '';
+      if (url) {
+        if (!/^https?:\/\//i.test(url)) { res.status(400).json({ error: 'bad_url' }); return; }
+        try {
+          const fr = await fetch(url, { headers: { 'User-Agent': 'TenetLabs-SOEN/1.0' }, redirect: 'follow' });
+          const html = await fr.text();
+          content = html.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '')
+            .replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 24000);
+        } catch {
+          res.status(200).json({ error: 'fetch_failed' }); return;
+        }
+      }
+
+      const prompt = url
+        ? `Extract a complete recipe from this web page text. Return ONLY JSON: {"c":"Breakfast"|"Lunch"|"Dinner"|"Snacks & Dessert","n":"Name","tag":"Category · X min","mac":"~NNN kcal · NNg P","ing":["…"],"st":["…"]}. Text: ${content}`
+        : `Extract recipe from image. Return ONLY JSON with keys c,n,tag,mac,ing,st. ${hint}`;
+
+      const parts: any[] = [{ text: prompt }];
+      if (imageBase64) parts.push({ inline_data: { mime_type: 'image/jpeg', data: imageBase64 } });
+
+      const gr = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${secrets.gemini_key}`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents: [{ parts }] }) },
+      );
+      if (!gr.ok) { res.status(200).json({ error: 'ai_failed' }); return; }
+      const gj = await gr.json();
+      const text = gj.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      const m = text.match(/\{[\s\S]*\}/);
+      if (!m) { res.status(200).json({ error: 'parse_failed' }); return; }
+      try {
+        const recipe = JSON.parse(m[0]);
+        res.status(200).json({ recipe });
+      } catch {
+        res.status(200).json({ error: 'parse_failed' });
+      }
+      return;
+    }
+
     res.status(400).json({ error: 'unknown_service' });
   } catch (e: any) {
     res.status(500).json({ error: 'server', detail: String(e?.message || e) });

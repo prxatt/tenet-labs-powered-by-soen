@@ -2,10 +2,11 @@
  * Outbound API calls: AI (Ollama → serverless Groq/Gemini → local-key fallback)
  * and Oura sync (serverless proxy → local-key fallback).
  */
-import type { OuraDay } from './types';
+import type { OuraDay, Recipe } from './types';
 import { key, addD } from './dates';
 import { store } from './store';
 import { ensureSession, hasSupabase } from './sync';
+import { parseRecipe, recipeImportPrompt } from './ai';
 
 /* ---- local fallback keys (used only when not signed into the backend) ---- */
 const LS_KEYS = 'tl7_keys';
@@ -17,19 +18,30 @@ export function setLocalKeys(k: LocalKeys) {
   localStorage.setItem(LS_KEYS, JSON.stringify({ ...getLocalKeys(), ...k }));
 }
 
-async function serverCall(body: Record<string, unknown>): Promise<any | null> {
-  if (!hasSupabase()) return null;
+export interface ServerResult {
+  ok: boolean;
+  data?: Record<string, unknown>;
+  error?: string;
+  status?: number;
+}
+
+async function serverCall(body: Record<string, unknown>): Promise<ServerResult> {
+  if (!hasSupabase()) return { ok: false, error: 'no_backend' };
   const s = await ensureSession();
-  if (!s) return null;
+  if (!s) return { ok: false, error: 'no_auth' };
   try {
     const r = await fetch('/api/soen', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + s.access_token },
       body: JSON.stringify(body),
     });
-    if (!r.ok) return null;
-    return await r.json();
-  } catch { return null; }
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) return { ok: false, error: String(data.error || 'http_' + r.status), status: r.status, data };
+    if (data.error) return { ok: false, error: String(data.error), data };
+    return { ok: true, data };
+  } catch {
+    return { ok: false, error: 'network' };
+  }
 }
 
 /* ---------------- AI ---------------- */
@@ -46,7 +58,6 @@ export const DEFAULT_OLLAMA_MODEL = 'hermes-agent';
 
 export async function aiCall(prompt: string): Promise<string | null> {
   const prefs = store.get().plan.prefs;
-  // 1. Ollama on localhost (offline/flights) — always client-side
   if (prefs.ollama) {
     try {
       const r = await fetch('http://localhost:11434/api/chat', {
@@ -58,12 +69,10 @@ export async function aiCall(prompt: string): Promise<string | null> {
         }),
       });
       if (r.ok) return (await r.json()).message.content;
-    } catch { /* offline server not running */ }
+    } catch { /* offline */ }
   }
-  // 2. Serverless (keys never touch the browser)
   const srv = await serverCall({ service: 'ai', prompt });
-  if (srv?.text) return srv.text;
-  // 3. Local-key fallback (pre-backend behavior)
+  if (srv.ok && srv.data?.text) return String(srv.data.text);
   const k = getLocalKeys();
   if (k.groq) {
     try {
@@ -73,7 +82,7 @@ export async function aiCall(prompt: string): Promise<string | null> {
         body: JSON.stringify({ model: 'llama-3.3-70b-versatile', messages: [{ role: 'user', content: prompt }] }),
       });
       if (r.ok) return (await r.json()).choices[0].message.content;
-    } catch { /* next provider */ }
+    } catch { /* next */ }
   }
   if (k.gemini) {
     try {
@@ -85,6 +94,19 @@ export async function aiCall(prompt: string): Promise<string | null> {
     } catch { /* fall through */ }
   }
   return null;
+}
+
+/* ---------------- Recipe import ---------------- */
+
+export async function importRecipe(opts: { url?: string; imageBase64?: string; hint?: string }): Promise<Recipe | null> {
+  const srv = await serverCall({ service: 'recipe_import', ...opts });
+  if (srv.ok && srv.data?.recipe) {
+    try { return parseRecipe(JSON.stringify(srv.data.recipe)); } catch { /* fall through */ }
+  }
+  const prompt = recipeImportPrompt(opts);
+  const a = await aiCall(prompt);
+  if (!a) return null;
+  try { return parseRecipe(a); } catch { return null; }
 }
 
 /* ---------------- Oura ---------------- */
@@ -109,29 +131,46 @@ function mergeOura(target: Record<string, OuraDay>, payload: any): Record<string
   return out;
 }
 
-export async function syncOura(): Promise<'ok' | 'nokey' | 'err'> {
+export type OuraSyncResult = 'ok' | 'nokey' | 'no_auth' | 'oura_api_error' | 'network' | 'err';
+
+let lastOuraError: string | null = null;
+let lastOuraErrorAt = 0;
+
+export function getOuraError(): string | null {
+  if (lastOuraError && Date.now() - lastOuraErrorAt < 300000) return lastOuraError;
+  return null;
+}
+
+export async function syncOura(): Promise<OuraSyncResult> {
   const end = key(addD(new Date(), 1)), start = key(addD(new Date(), -13));
-  // 1. serverless proxy
   const srv = await serverCall({ service: 'oura', start, end });
-  if (srv?.readiness) {
-    store.setOura(mergeOura(store.get().oura, srv));
+  if (srv.ok && srv.data?.readiness) {
+    store.setOura(mergeOura(store.get().oura, srv.data));
+    lastOuraError = null;
     return 'ok';
   }
-  if (srv?.error === 'no_token') return 'nokey';
-  // 2. local-key fallback
+  if (srv.error === 'no_auth') { lastOuraError = 'Sign in to sync Oura server-side'; lastOuraErrorAt = Date.now(); return 'no_auth'; }
+  if (srv.error === 'no_token') { lastOuraError = 'Add Oura token in Settings'; lastOuraErrorAt = Date.now(); return 'nokey'; }
+  if (srv.error === 'network') { lastOuraError = 'Network error'; lastOuraErrorAt = Date.now(); return 'network'; }
   const tok = getLocalKeys().oura;
-  if (!tok) return 'nokey';
+  if (!tok && srv.error) { lastOuraError = srv.error; lastOuraErrorAt = Date.now(); return srv.error === 'no_token' ? 'nokey' : 'err'; }
+  if (!tok) { lastOuraError = 'No Oura token'; lastOuraErrorAt = Date.now(); return 'nokey'; }
   try {
     const H = { headers: { Authorization: 'Bearer ' + tok } };
     const q = (p: string) =>
       fetch(`https://api.ouraring.com/v2/usercollection/${p}?start_date=${start}&end_date=${end}`, H)
-        .then(r => (r.ok ? r.json() : { data: [] }));
+        .then(r => (r.ok ? r.json() : Promise.reject(new Error('oura_' + r.status))));
     const [readiness, dailySleep, sleep, activity, stress] = await Promise.all([
       q('daily_readiness'), q('daily_sleep'), q('sleep'), q('daily_activity'), q('daily_stress'),
     ]);
     store.setOura(mergeOura(store.get().oura, { readiness, dailySleep, sleep, activity, stress }));
+    lastOuraError = null;
     return 'ok';
-  } catch { return 'err'; }
+  } catch {
+    lastOuraError = 'Oura API error — check token';
+    lastOuraErrorAt = Date.now();
+    return 'oura_api_error';
+  }
 }
 
 /* ---------------- GitHub build tracker ---------------- */
@@ -149,8 +188,8 @@ export async function ghStatus(): Promise<RepoStatus[]> {
   for (const [name, slug] of repos) {
     try {
       const srv = await serverCall({ service: 'github', repo: slug });
-      if (srv?.msg) {
-        out.push({ name, days: srv.days, msg: srv.msg, ok: true });
+      if (srv.ok && srv.data?.msg) {
+        out.push({ name, days: Number(srv.data.days), msg: String(srv.data.msg), ok: true });
         continue;
       }
       const r = await fetch('https://api.github.com/repos/' + slug + '/commits?per_page=1');
