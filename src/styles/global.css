@@ -227,8 +227,10 @@ h1.plan{font-size:1.9rem;font-weight:600;margin-top:12px}
 .dchip .dot{width:4px;height:4px;border-radius:50%;background:var(--green2);margin:3px auto 0}
 .dstrip-weeks .dchips{display:flex;gap:0;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;scrollbar-width:none;width:100%;max-width:100%;padding:4px 0;flex:1 1 auto}
 .dstrip-weeks .dchips::-webkit-scrollbar{display:none}
-.dweek{flex:0 0 100%;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;scroll-snap-align:start;scroll-snap-stop:always;padding:0 2px;box-sizing:border-box}
-.dweek .dchip-wrap{min-width:0}
+.dweek{flex:0 0 100%;display:flex;justify-content:center;align-items:flex-end;gap:6px;scroll-snap-align:center;scroll-snap-stop:always;padding:0 12px;box-sizing:border-box}
+.dweek .dchip-wrap{flex:0 0 44px;width:44px;min-width:44px}
+.dmonth-empty{visibility:hidden}
+.dstrip-weeks .dchip{width:44px;max-width:44px;margin:0}
 
 .card{background:var(--glass);border:1px solid var(--gline);outline:1px solid var(--line);outline-offset:-1px;border-radius:var(--r);padding:18px;box-shadow:var(--gsh);min-width:0;backdrop-filter:blur(22px) saturate(1.35);-webkit-backdrop-filter:blur(22px) saturate(1.35);transition:transform .35s var(--spring),box-shadow .35s;animation:cardin .55s var(--spring) backwards}
 .card:hover{transform:translateY(-1px)}

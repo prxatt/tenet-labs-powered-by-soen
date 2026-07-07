@@ -27,8 +27,10 @@ export default function DateStrip({ cur, onPick }: { cur: Date; onPick: (d: Date
   useEffect(() => {
     const root = scrollRef.current;
     if (!root) return;
-    const week = root.querySelector('.dweek:has(.dchip.on)') as HTMLElement | null;
-    week?.scrollIntoView({ inline: 'start', block: 'nearest', behavior: 'smooth' });
+    const chip = root.querySelector('.dchip.on') as HTMLElement | null;
+    const week = chip?.closest('.dweek') as HTMLElement | null;
+    if (week) week.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+    else chip?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
   }, [curK]);
 
   return (
@@ -46,7 +48,9 @@ export default function DateStrip({ cur, onPick }: { cur: Date; onPick: (d: Date
                 if (showMonth) lastMonth = d.getMonth();
                 return (
                   <div key={k} className="dchip-wrap">
-                    {showMonth && <div className="dmonth">{MN[d.getMonth()].slice(0, 3)}</div>}
+                    <div className={'dmonth' + (showMonth ? '' : ' dmonth-empty')}>
+                      {showMonth ? MN[d.getMonth()].slice(0, 3) : ''}
+                    </div>
                     <div className={'dchip' + (on ? ' on' : '')} role="button" aria-label={'go to ' + k}
                       onClick={() => onPick(new Date(d))}>
                       <small>{DN[d.getDay()]}</small><b>{d.getDate()}</b>
