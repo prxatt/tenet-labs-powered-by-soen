@@ -30,6 +30,7 @@ create table if not exists public.user_secrets (
   oura_token text,
   gemini_key text,
   groq_key text,
+  github_token text,
   updated_at timestamptz not null default now()
 );
 
@@ -56,9 +57,10 @@ as $$
     (select json_build_object(
       'oura',   (s.oura_token  is not null and s.oura_token  <> ''),
       'gemini', (s.gemini_key  is not null and s.gemini_key  <> ''),
-      'groq',   (s.groq_key    is not null and s.groq_key    <> ''))
+      'groq',   (s.groq_key    is not null and s.groq_key    <> ''),
+      'github', (s.github_token is not null and s.github_token <> ''))
      from public.user_secrets s where s.user_id = auth.uid()),
-    json_build_object('oura', false, 'gemini', false, 'groq', false));
+    json_build_object('oura', false, 'gemini', false, 'groq', false, 'github', false));
 $$;
 
 grant execute on function public.secrets_status() to authenticated;

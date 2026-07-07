@@ -27,7 +27,7 @@ export default async function handler(req: any, res: any) {
 
   const { data: secrets } = await admin
     .from('user_secrets')
-    .select('oura_token, gemini_key, groq_key')
+    .select('oura_token, gemini_key, groq_key, github_token')
     .eq('user_id', uid)
     .maybeSingle();
 
@@ -87,6 +87,24 @@ export default async function handler(req: any, res: any) {
         return;
       }
       res.status(200).json({ error: 'no_ai_key' });
+      return;
+    }
+
+    if (body.service === 'github') {
+      const slug = String(body.repo || '').trim();
+      if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(slug)) {
+        res.status(400).json({ error: 'bad_repo' }); return;
+      }
+      const tok = secrets?.github_token || process.env.GITHUB_TOKEN || '';
+      if (!tok) { res.status(200).json({ error: 'no_github_token' }); return; }
+      const r = await fetch(`https://api.github.com/repos/${slug}/commits?per_page=1`, {
+        headers: { Authorization: 'Bearer ' + tok, Accept: 'application/vnd.github+json' },
+      });
+      if (!r.ok) { res.status(200).json({ error: 'github_failed' }); return; }
+      const j = await r.json();
+      const dt = new Date(j[0].commit.author.date);
+      const days = Math.floor((Date.now() - dt.getTime()) / 864e5);
+      res.status(200).json({ days, msg: j[0].commit.message.split('\n')[0].slice(0, 48) });
       return;
     }
 

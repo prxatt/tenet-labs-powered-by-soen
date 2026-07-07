@@ -5,11 +5,11 @@
 import type { OuraDay } from './types';
 import { key, addD } from './dates';
 import { store } from './store';
-import { getSession, hasSupabase } from './sync';
+import { ensureSession, hasSupabase } from './sync';
 
 /* ---- local fallback keys (used only when not signed into the backend) ---- */
 const LS_KEYS = 'tl7_keys';
-export interface LocalKeys { oura?: string; gemini?: string; groq?: string; }
+export interface LocalKeys { oura?: string; gemini?: string; groq?: string; github?: string; }
 export function getLocalKeys(): LocalKeys {
   try { return JSON.parse(localStorage.getItem(LS_KEYS) || '{}'); } catch { return {}; }
 }
@@ -19,7 +19,7 @@ export function setLocalKeys(k: LocalKeys) {
 
 async function serverCall(body: Record<string, unknown>): Promise<any | null> {
   if (!hasSupabase()) return null;
-  const s = await getSession();
+  const s = await ensureSession();
   if (!s) return null;
   try {
     const r = await fetch('/api/soen', {
@@ -34,6 +34,16 @@ async function serverCall(body: Record<string, unknown>): Promise<any | null> {
 
 /* ---------------- AI ---------------- */
 
+export const OLLAMA_MODELS = [
+  { id: 'hermes-agent', label: 'Hermes Agent' },
+  { id: 'qwen3', label: 'Qwen 3' },
+  { id: 'qwen2.5-coder', label: 'Qwen 2.5 Coder' },
+  { id: 'north-minicode-1', label: 'North Mini Code 1' },
+  { id: 'minicpm-v', label: 'MiniCPM (Vision)' },
+] as const;
+
+export const DEFAULT_OLLAMA_MODEL = 'hermes-agent';
+
 export async function aiCall(prompt: string): Promise<string | null> {
   const prefs = store.get().plan.prefs;
   // 1. Ollama on localhost (offline/flights) — always client-side
@@ -41,7 +51,11 @@ export async function aiCall(prompt: string): Promise<string | null> {
     try {
       const r = await fetch('http://localhost:11434/api/chat', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: prefs.ollamaModel || 'llama3.2', messages: [{ role: 'user', content: prompt }], stream: false }),
+        body: JSON.stringify({
+          model: prefs.ollamaModel || DEFAULT_OLLAMA_MODEL,
+          messages: [{ role: 'user', content: prompt }],
+          stream: false,
+        }),
       });
       if (r.ok) return (await r.json()).message.content;
     } catch { /* offline server not running */ }
@@ -134,6 +148,11 @@ export async function ghStatus(): Promise<RepoStatus[]> {
   const out: RepoStatus[] = [];
   for (const [name, slug] of repos) {
     try {
+      const srv = await serverCall({ service: 'github', repo: slug });
+      if (srv?.msg) {
+        out.push({ name, days: srv.days, msg: srv.msg, ok: true });
+        continue;
+      }
       const r = await fetch('https://api.github.com/repos/' + slug + '/commits?per_page=1');
       if (!r.ok) throw new Error();
       const j = await r.json();
@@ -141,7 +160,7 @@ export async function ghStatus(): Promise<RepoStatus[]> {
       const days = Math.floor((Date.now() - dt.getTime()) / 864e5);
       out.push({ name, days, msg: j[0].commit.message.split('\n')[0].slice(0, 48), ok: true });
     } catch {
-      out.push({ name, days: -1, msg: 'unreachable (private repo needs the serverless proxy)', ok: false });
+      out.push({ name, days: -1, msg: 'unreachable — add a GitHub PAT in Settings for private repos', ok: false });
     }
   }
   ghCache = out; ghAt = Date.now();

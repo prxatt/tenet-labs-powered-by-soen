@@ -69,6 +69,13 @@ export default function CommandDock({ cur, goToDate, openSheet }: {
     if (!text || busy) return;
     setV('');
 
+    if (/^soen:/i.test(text)) {
+      const q = text.replace(/^soen:\s*/i, '').trim();
+      if (!q) { toast('Type a question after soen: — e.g. soen: how should I train today?'); return; }
+      openSheet({ type: 'ask', prefill: q });
+      return;
+    }
+
     if (/^recipe:/i.test(text)) {
       setBusy(true); toast('SOEN is writing your recipe…');
       const r = await generateRecipe(text.replace(/^recipe:\s*/i, ''));
@@ -108,6 +115,7 @@ export default function CommandDock({ cur, goToDate, openSheet }: {
     <div className="cmdwrap">
       <div id="chips">
         <span onClick={() => setV('dinner with ')}>＋ dinner…</span>
+        <span onClick={() => setV('soen: ')}>＋ soen:</span>
         <span onClick={() => setV('recipe: ')}>＋ recipe:</span>
         <span onClick={() => openSheet({ type: 'log' })}>＋ log day</span>
         <span onClick={() => openSheet({ type: 'shot' })}>shot list</span>
@@ -116,7 +124,7 @@ export default function CommandDock({ cur, goToDate, openSheet }: {
       <div className="cmd">
         <span className="slash">/</span>
         <input ref={inputRef} value={v} onChange={e => setV(e.target.value)} onKeyDown={e => e.key === 'Enter' && run()}
-          placeholder={busy ? 'SOEN is thinking…' : 'coffee with Alex tomorrow 3pm · recipe: chicken katsu'} style={{ flex: 1 }} />
+          placeholder={busy ? 'SOEN is thinking…' : 'coffee tomorrow 3pm · soen: how should I train? · recipe: katsu'} style={{ flex: 1 }} />
         <button className="go" onClick={() => void run()}>{busy ? '…' : 'Add'}</button>
       </div>
     </div>

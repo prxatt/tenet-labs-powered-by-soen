@@ -20,11 +20,11 @@ import AskSheet from './sheets/AskSheet';
 import SettingsSheet from './sheets/SettingsSheet';
 import RecipeSheet from './sheets/RecipeSheet';
 import ShotListSheet from './sheets/ShotListSheet';
-import { IcWave, IcFuel, IcRoad, IcSpark } from './Icons';
+import { IcWave, IcFuel, IcRoad } from './Icons';
 
 export type SheetReq =
   | { type: 'event'; block: Block; shownOn: string }
-  | { type: 'log' } | { type: 'settings' } | { type: 'ask' } | { type: 'retune' }
+  | { type: 'log' } | { type: 'settings' } | { type: 'ask'; prefill?: string } | { type: 'retune' }
   | { type: 'shot' } | { type: 'recipe'; recipe: Recipe };
 
 type Tab = 'rhythm' | 'fuel' | 'roadmap';
@@ -112,7 +112,6 @@ export default function App() {
           <button className={'tab' + (tab === 'rhythm' ? ' on' : '')} onClick={() => setTab('rhythm')}><IcWave />Rhythm</button>
           <button className={'tab' + (tab === 'fuel' ? ' on' : '')} onClick={() => setTab('fuel')}><IcFuel />Fuel</button>
           <button className={'tab' + (tab === 'roadmap' ? ' on' : '')} onClick={() => setTab('roadmap')}><IcRoad />Roadmap</button>
-          <button className="tab" onClick={() => openSheet({ type: 'ask' })}><IcSpark />Ask SOEN</button>
         </div>
 
         <div className={'view' + (tab === 'rhythm' ? ' on' : '')}>
@@ -159,7 +158,9 @@ export default function App() {
 
       {sheet?.type === 'event' && <EventSheet block={sheet.block} shownOn={sheet.shownOn} onClose={() => setSheet(null)} />}
       {sheet?.type === 'log' && <LogSheet cur={cur} onClose={() => setSheet(null)} />}
-      {(sheet?.type === 'ask' || sheet?.type === 'retune') && <AskSheet cur={cur} retune={sheet.type === 'retune'} onClose={() => setSheet(null)} />}
+      {(sheet?.type === 'ask' || sheet?.type === 'retune') && (
+        <AskSheet cur={cur} retune={sheet.type === 'retune'} prefill={sheet.type === 'ask' ? sheet.prefill : undefined} onClose={() => setSheet(null)} />
+      )}
       {sheet?.type === 'settings' && <SettingsSheet onClose={() => setSheet(null)} />}
       {sheet?.type === 'recipe' && <RecipeSheet recipe={sheet.recipe} onClose={() => setSheet(null)} />}
       {sheet?.type === 'shot' && <ShotListSheet onClose={() => setSheet(null)} />}

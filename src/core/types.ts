@@ -92,7 +92,7 @@ export interface PlanState {
 export const emptyPlanState = (): PlanState => ({
   moves: {}, times: {}, done: {}, edits: {}, logs: {}, todos: {},
   custom: {}, shots: {}, userRecipes: [],
-  prefs: { gymLoc: null }, updatedAt: 0,
+  prefs: { gymLoc: null, repoB: 'prxatt/tenet-labs-powered-by-soen', ollamaModel: 'hermes-agent' }, updatedAt: 0,
 });
 
 export interface LaneBlock {

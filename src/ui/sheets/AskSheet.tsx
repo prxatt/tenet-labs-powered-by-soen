@@ -5,8 +5,8 @@ import { aiCall } from '../../core/api';
 import { store } from '../../core/store';
 import Sheet from '../Sheet';
 
-export default function AskSheet({ cur, retune, onClose }: { cur: Date; retune?: boolean; onClose: () => void }) {
-  const [q, setQ] = useState('');
+export default function AskSheet({ cur, retune, prefill, onClose }: { cur: Date; retune?: boolean; prefill?: string; onClose: () => void }) {
+  const [q, setQ] = useState(prefill || '');
   const [out, setOut] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const { plan, oura } = store.get();
@@ -32,6 +32,7 @@ export default function AskSheet({ cur, retune, onClose }: { cur: Date; retune?:
   };
 
   useEffect(() => { if (retune) void run(''); }, []);
+  useEffect(() => { if (prefill?.trim()) void run(prefill.trim()); }, [prefill]);
 
   return (
     <Sheet onClose={onClose}>
