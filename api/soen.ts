@@ -14,23 +14,39 @@ const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL |
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
 async function pullOura(tok: string, start: string, end: string) {
-  const q = async (p: string) => {
-    const r = await fetch(`https://api.ouraring.com/v2/usercollection/${p}?start_date=${start}&end_date=${end}`, {
-      headers: { Authorization: 'Bearer ' + tok },
-    });
-    if (!r.ok) {
-      const detail = await r.text().catch(() => '');
-      const err: any = new Error('oura_' + r.status);
-      err.status = r.status;
-      err.detail = detail;
-      throw err;
-    }
-    return r.json();
-  };
-  const [readiness, dailySleep, sleep, activity, stress] = await Promise.all([
-    q('daily_readiness'), q('daily_sleep'), q('sleep'), q('daily_activity'), q('daily_stress'),
-  ]);
-  return { readiness, dailySleep, sleep, activity, stress };
+  const pairs: [string, string][] = [
+    ['daily_readiness', 'readiness'],
+    ['daily_sleep', 'dailySleep'],
+    ['sleep', 'sleep'],
+    ['daily_activity', 'activity'],
+    ['daily_stress', 'stress'],
+  ];
+  const out: Record<string, { data: unknown[] }> = {};
+  let authBad = false;
+
+  for (const [path, key] of pairs) {
+    const r = await fetch(
+      `https://api.ouraring.com/v2/usercollection/${path}?start_date=${start}&end_date=${end}`,
+      { headers: { Authorization: 'Bearer ' + tok } },
+    );
+    if (r.status === 401) { authBad = true; break; }
+    if (r.ok) out[key] = await r.json();
+    else out[key] = { data: [] }; // 403/404 on stress etc. — token can still be valid
+  }
+
+  if (authBad) {
+    const err: any = new Error('oura_401');
+    err.status = 401;
+    throw err;
+  }
+
+  const hasData = Object.values(out).some(v => Array.isArray(v?.data) && v.data.length > 0);
+  if (!hasData) {
+    const err: any = new Error('oura_empty');
+    err.status = 0;
+    throw err;
+  }
+  return out;
 }
 
 export default async function handler(req: any, res: any) {
@@ -50,7 +66,9 @@ export default async function handler(req: any, res: any) {
       res.status(200).json(await pullOura(tok, start, end));
     } catch (e: any) {
       const st = e?.status || 0;
-      res.status(200).json({ error: st === 401 || st === 403 ? 'oura_rejected' : 'oura_failed', status: st });
+      if (st === 401) res.status(200).json({ error: 'oura_rejected' });
+      else if (st === 0) res.status(200).json({ error: 'oura_empty' });
+      else res.status(200).json({ error: 'oura_failed', status: st });
     }
     return;
   }
@@ -83,7 +101,9 @@ export default async function handler(req: any, res: any) {
         res.status(200).json(await pullOura(tok, start, end));
       } catch (e: any) {
         const st = e?.status || 0;
-        res.status(200).json({ error: st === 401 || st === 403 ? 'oura_rejected' : 'oura_failed', status: st });
+        if (st === 401) res.status(200).json({ error: 'oura_rejected' });
+        else if (st === 0) res.status(200).json({ error: 'oura_empty' });
+        else res.status(200).json({ error: 'oura_failed', status: st });
       }
       return;
     }

@@ -15,7 +15,9 @@ export function getLocalKeys(): LocalKeys {
   try { return JSON.parse(localStorage.getItem(LS_KEYS) || '{}'); } catch { return {}; }
 }
 export function setLocalKeys(k: LocalKeys) {
-  localStorage.setItem(LS_KEYS, JSON.stringify({ ...getLocalKeys(), ...k }));
+  const clean = { ...k };
+  if (clean.oura) clean.oura = clean.oura.replace(/\s+/g, '');
+  localStorage.setItem(LS_KEYS, JSON.stringify({ ...getLocalKeys(), ...clean }));
 }
 
 export interface ServerResult {
@@ -34,7 +36,7 @@ async function ouraProxyCall(tok: string, start: string, end: string): Promise<S
     });
     const data = await r.json().catch(() => ({}));
     if (data.error) return { ok: false, error: String(data.error), data };
-    if (data.readiness) return { ok: true, data };
+    if (data.readiness || data.dailySleep || data.activity || data.sleep) return { ok: true, data };
     return { ok: false, error: 'oura_empty' };
   } catch {
     return { ok: false, error: 'network' };
@@ -173,9 +175,9 @@ export async function syncOura(): Promise<OuraSyncResult> {
   const s = await ensureSession();
   if (s) {
     const srv = await serverCall({ service: 'oura', start, end });
-    if (srv.ok && srv.data?.readiness) return apply(srv.data);
+    if (srv.ok && srv.data) return apply(srv.data);
     if (srv.error === 'oura_rejected') {
-      lastOuraError = 'Oura rejected this token — create a new Personal Access Token at cloud.ouraring.com';
+      lastOuraError = 'Invalid Oura token — create a new Personal Access Token at cloud.ouraring.com';
       lastOuraErrorAt = Date.now();
       return 'oura_api_error';
     }
@@ -191,9 +193,14 @@ export async function syncOura(): Promise<OuraSyncResult> {
   if (proxy.ok && proxy.data) return apply(proxy.data);
 
   if (proxy.error === 'oura_rejected') {
-    lastOuraError = 'Oura rejected this token — create a new Personal Access Token at cloud.ouraring.com';
+    lastOuraError = 'Invalid Oura token — create a new Personal Access Token at cloud.ouraring.com';
     lastOuraErrorAt = Date.now();
     return 'oura_api_error';
+  }
+  if (proxy.error === 'oura_empty') {
+    lastOuraError = 'Oura returned no data — ring may still be syncing; try again in an hour';
+    lastOuraErrorAt = Date.now();
+    return 'err';
   }
   if (proxy.error === 'network') {
     lastOuraError = 'Network error — check connection';

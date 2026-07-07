@@ -58,10 +58,11 @@ export default function SettingsSheet({ onClose }: { onClose: () => void }) {
   }, [signedIn]);
 
   const ouraSyncToast = (r: Awaited<ReturnType<typeof syncOura>>) => {
-    if (r === 'ok') return 'Oura synced — check Health on Rhythm tab';
-    if (r === 'oura_api_error') return 'Oura rejected the token — create a new one at cloud.ouraring.com';
-    if (r === 'network') return 'No network — try again on Wi‑Fi';
-    return 'Could not reach Oura — check token and try again';
+    if (r === 'ok') return 'Oura synced ✓';
+    if (r === 'oura_api_error') return 'Token not accepted — get a new Personal Access Token at cloud.ouraring.com';
+    if (r === 'err') return 'No Oura data yet — try again later';
+    if (r === 'network') return 'No network — try on Wi‑Fi';
+    return 'Could not sync Oura';
   };
 
   /** Oura does NOT need sign-in. Saves on this device and syncs immediately. */
