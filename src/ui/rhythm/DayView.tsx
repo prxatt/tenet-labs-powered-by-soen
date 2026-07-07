@@ -9,10 +9,11 @@ import RhythmDashboard from './RhythmDashboard';
 
 const PX = 38, T0 = 7, T1 = 23.5;
 
-function blockHeight(dur: number): number {
+function blockHeight(dur: number, cols: number): number {
   const slotPx = dur * PX;
-  if (slotPx < 18) return Math.max(12, slotPx - 2);
-  return Math.max(16, slotPx - 4);
+  const minH = cols > 1 ? 40 : 18;
+  if (slotPx < 22) return Math.max(minH, slotPx);
+  return Math.max(minH, slotPx - 4);
 }
 
 export function Timeline({ cur, openSheet }: { cur: Date; openSheet: (s: SheetReq) => void }) {
@@ -46,9 +47,10 @@ export function Timeline({ cur, openSheet }: { cur: Date; openSheet: (s: SheetRe
         {lanes.map(({ b, col, cols }) => {
           const dk = b.date + '|' + b.id;
           const isDone = !!plan.done[dk];
-          const hpx = blockHeight(b.dur);
+          const hpx = blockHeight(b.dur, cols);
           const focused = focus === dk;
           const narrow = cols > 1 && !focused;
+          const showDetail = !narrow || focused || b.dur >= 0.35;
           const cls = ['blkT', b.cls,
             isDone ? 'done' : '',
             b.dur < 0.45 && narrow ? 'tiny' : '',
@@ -63,6 +65,7 @@ export function Timeline({ cur, openSheet }: { cur: Date; openSheet: (s: SheetRe
                 left: `calc(${TL_LEFT}px + ${col} * (${colW} + ${GUT}px))`,
                 width: colW,
                 zIndex: focused ? 60 : 10 + col + Math.round((1 / b.dur) * 5),
+                ['--blk-h' as string]: hpx + 'px',
               }}
               onClick={e => {
                 e.stopPropagation();
@@ -73,10 +76,10 @@ export function Timeline({ cur, openSheet }: { cur: Date; openSheet: (s: SheetRe
               <span className={'ckbox' + (isDone ? ' ok' : '')} title="Mark done"
                 onClick={e => { e.stopPropagation(); store.toggleDone(dk); toast(isDone ? 'Unchecked' : 'Done — synced'); }} />
               <b title={b.ti}>{b.ti}</b>
-              {(!narrow || focused) && b.dur >= 0.45 && (
+              {showDetail && (
                 <small>{fmt(b.t)}–{fmt(b.t + b.dur)}{b.su && (cols < 2 || focused) ? ' · ' + b.su : ''}</small>
               )}
-              {b.dur >= 1.2 && (!narrow || focused) && (cols < 3 || focused) && (
+              {b.dur >= 1.2 && showDetail && (cols < 3 || focused) && (
                 <span className="ftag">{b.fo}{b.movedIn ? ' · moved' : ''}</span>
               )}
             </div>
