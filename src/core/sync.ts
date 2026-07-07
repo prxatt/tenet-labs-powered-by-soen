@@ -17,9 +17,38 @@ export function hasSupabase(): boolean { return !!(URL && ANON); }
 
 export function supa(): SupabaseClient {
   if (!client) client = createClient(URL!, ANON!, {
-    auth: { autoRefreshToken: true, persistSession: true, detectSessionInUrl: true },
+    auth: {
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: true,
+      flowType: 'pkce',
+    },
   });
   return client;
+}
+
+/** Complete sign-in when user returns from email magic link. */
+export async function completeAuthFromUrl(): Promise<Session | null> {
+  if (!hasSupabase()) return null;
+  const pageUrl = new window.URL(window.location.href);
+
+  const code = pageUrl.searchParams.get('code');
+  if (code) {
+    const { data, error } = await supa().auth.exchangeCodeForSession(code);
+    if (!error && data.session) {
+      window.history.replaceState({}, document.title, pageUrl.pathname);
+      return data.session;
+    }
+  }
+
+  if (window.location.hash.includes('access_token')) {
+    const { data: { session } } = await supa().auth.getSession();
+    if (session) {
+      window.history.replaceState({}, document.title, pageUrl.pathname);
+      return session;
+    }
+  }
+  return null;
 }
 
 export async function getSession(): Promise<Session | null> {
@@ -44,7 +73,7 @@ export async function signInMagic(email: string): Promise<{ error: string | null
   const redirect = window.location.origin + window.location.pathname;
   const { error } = await supa().auth.signInWithOtp({
     email,
-    options: { emailRedirectTo: redirect },
+    options: { emailRedirectTo: redirect, shouldCreateUser: true },
   });
   return { error: error?.message ?? null };
 }
@@ -178,15 +207,17 @@ export async function secretsStatus(): Promise<{ oura: boolean; gemini: boolean;
 export function initSync() {
   store.onPlanChange = schedulePush;
   if (!hasSupabase()) { store.setSync('local'); return; }
-  supa().auth.onAuthStateChange((_e, session) => {
+  supa().auth.onAuthStateChange((event, session) => {
     if (session) {
+      store.setSync('syncing', session.user.email ?? null);
       void (async () => {
         await migrateLocalSecrets();
         await pullPlan();
       })();
-    } else store.setSync('local', null);
+    } else if (event === 'SIGNED_OUT') store.setSync('local', null);
   });
   void (async () => {
+    await completeAuthFromUrl();
     const s = await ensureSession();
     if (s) {
       store.setSync('syncing', s.user.email ?? null);

@@ -13,8 +13,48 @@ export const config = { runtime: 'nodejs' };
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
+async function pullOura(tok: string, start: string, end: string) {
+  const q = async (p: string) => {
+    const r = await fetch(`https://api.ouraring.com/v2/usercollection/${p}?start_date=${start}&end_date=${end}`, {
+      headers: { Authorization: 'Bearer ' + tok },
+    });
+    if (!r.ok) {
+      const detail = await r.text().catch(() => '');
+      const err: any = new Error('oura_' + r.status);
+      err.status = r.status;
+      err.detail = detail;
+      throw err;
+    }
+    return r.json();
+  };
+  const [readiness, dailySleep, sleep, activity, stress] = await Promise.all([
+    q('daily_readiness'), q('daily_sleep'), q('sleep'), q('daily_activity'), q('daily_stress'),
+  ]);
+  return { readiness, dailySleep, sleep, activity, stress };
+}
+
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'method' }); return; }
+
+  const body = req.body || {};
+
+  /* Oura from phone — browsers cannot call api.ouraring.com (CORS). Proxy here, no sign-in needed. */
+  if (body.service === 'oura_proxy') {
+    const tok = String(body.oura_token || '').trim();
+    const start = String(body.start || ''), end = String(body.end || '');
+    if (!tok) { res.status(200).json({ error: 'no_token' }); return; }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end)) {
+      res.status(400).json({ error: 'bad_dates' }); return;
+    }
+    try {
+      res.status(200).json(await pullOura(tok, start, end));
+    } catch (e: any) {
+      const st = e?.status || 0;
+      res.status(200).json({ error: st === 401 || st === 403 ? 'oura_rejected' : 'oura_failed', status: st });
+    }
+    return;
+  }
+
   if (!SUPABASE_URL || !SERVICE_KEY) { res.status(500).json({ error: 'backend_not_configured' }); return; }
 
   const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
@@ -31,8 +71,6 @@ export default async function handler(req: any, res: any) {
     .eq('user_id', uid)
     .maybeSingle();
 
-  const body = req.body || {};
-
   try {
     if (body.service === 'oura') {
       const tok = secrets?.oura_token;
@@ -41,14 +79,12 @@ export default async function handler(req: any, res: any) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end)) {
         res.status(400).json({ error: 'bad_dates' }); return;
       }
-      const q = (p: string) =>
-        fetch(`https://api.ouraring.com/v2/usercollection/${p}?start_date=${start}&end_date=${end}`, {
-          headers: { Authorization: 'Bearer ' + tok },
-        }).then(r => (r.ok ? r.json() : { data: [] }));
-      const [readiness, dailySleep, sleep, activity, stress] = await Promise.all([
-        q('daily_readiness'), q('daily_sleep'), q('sleep'), q('daily_activity'), q('daily_stress'),
-      ]);
-      res.status(200).json({ readiness, dailySleep, sleep, activity, stress });
+      try {
+        res.status(200).json(await pullOura(tok, start, end));
+      } catch (e: any) {
+        const st = e?.status || 0;
+        res.status(200).json({ error: st === 401 || st === 403 ? 'oura_rejected' : 'oura_failed', status: st });
+      }
       return;
     }
 

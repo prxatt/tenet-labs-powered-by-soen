@@ -25,6 +25,22 @@ export interface ServerResult {
   status?: number;
 }
 
+async function ouraProxyCall(tok: string, start: string, end: string): Promise<ServerResult> {
+  try {
+    const r = await fetch('/api/soen', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ service: 'oura_proxy', oura_token: tok, start, end }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (data.error) return { ok: false, error: String(data.error), data };
+    if (data.readiness) return { ok: true, data };
+    return { ok: false, error: 'oura_empty' };
+  } catch {
+    return { ok: false, error: 'network' };
+  }
+}
+
 async function serverCall(body: Record<string, unknown>): Promise<ServerResult> {
   if (!hasSupabase()) return { ok: false, error: 'no_backend' };
   const s = await ensureSession();
@@ -146,50 +162,47 @@ export function getOuraError(): string | null {
 
 export async function syncOura(): Promise<OuraSyncResult> {
   const end = key(addD(new Date(), 1)), start = key(addD(new Date(), -13));
-  const localTok = getLocalKeys().oura;
+  const localTok = getLocalKeys().oura?.trim();
 
-  const fetchOura = async (tok: string): Promise<'ok'> => {
-    const H = { headers: { Authorization: 'Bearer ' + tok } };
-    const q = (p: string) =>
-      fetch(`https://api.ouraring.com/v2/usercollection/${p}?start_date=${start}&end_date=${end}`, H)
-        .then(r => (r.ok ? r.json() : Promise.reject(new Error('oura_' + r.status))));
-    const [readiness, dailySleep, sleep, activity, stress] = await Promise.all([
-      q('daily_readiness'), q('daily_sleep'), q('sleep'), q('daily_activity'), q('daily_stress'),
-    ]);
-    store.setOura(mergeOura(store.get().oura, { readiness, dailySleep, sleep, activity, stress }));
+  const apply = (payload: Record<string, unknown>): 'ok' => {
+    store.setOura(mergeOura(store.get().oura, payload));
     lastOuraError = null;
     return 'ok';
   };
 
   const s = await ensureSession();
-  let srv: ServerResult = { ok: false };
   if (s) {
-    srv = await serverCall({ service: 'oura', start, end });
-    if (srv.ok && srv.data?.readiness) {
-      store.setOura(mergeOura(store.get().oura, srv.data));
-      lastOuraError = null;
-      return 'ok';
-    }
-  }
-
-  if (localTok) {
-    try { return await fetchOura(localTok); }
-    catch {
-      lastOuraError = 'Oura API error — regenerate token at cloud.ouraring.com';
+    const srv = await serverCall({ service: 'oura', start, end });
+    if (srv.ok && srv.data?.readiness) return apply(srv.data);
+    if (srv.error === 'oura_rejected') {
+      lastOuraError = 'Oura rejected this token — create a new Personal Access Token at cloud.ouraring.com';
       lastOuraErrorAt = Date.now();
       return 'oura_api_error';
     }
   }
 
-  if (srv.error === 'no_auth') {
-    if (localTok) { /* fall through to local fetch */ }
-    else { lastOuraError = 'Add Oura token in Settings'; lastOuraErrorAt = Date.now(); return 'nokey'; }
+  if (!localTok) {
+    lastOuraError = 'Add Oura token in Settings';
+    lastOuraErrorAt = Date.now();
+    return 'nokey';
   }
-  if (srv.error === 'no_token') { lastOuraError = 'Add Oura token in Settings'; lastOuraErrorAt = Date.now(); return 'nokey'; }
-  if (srv.error === 'network') { lastOuraError = 'Network error'; lastOuraErrorAt = Date.now(); return 'network'; }
-  lastOuraError = 'No Oura token';
+
+  const proxy = await ouraProxyCall(localTok, start, end);
+  if (proxy.ok && proxy.data) return apply(proxy.data);
+
+  if (proxy.error === 'oura_rejected') {
+    lastOuraError = 'Oura rejected this token — create a new Personal Access Token at cloud.ouraring.com';
+    lastOuraErrorAt = Date.now();
+    return 'oura_api_error';
+  }
+  if (proxy.error === 'network') {
+    lastOuraError = 'Network error — check connection';
+    lastOuraErrorAt = Date.now();
+    return 'network';
+  }
+  lastOuraError = 'Oura sync failed — try a new token';
   lastOuraErrorAt = Date.now();
-  return 'nokey';
+  return 'oura_api_error';
 }
 
 /* ---------------- GitHub build tracker ---------------- */
