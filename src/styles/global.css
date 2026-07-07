@@ -216,9 +216,6 @@ h1.plan{font-size:1.9rem;font-weight:600;margin-top:12px}
 .rhythm-more{margin-top:4px}
 .rhythm-more-toggle{width:100%;border:0;background:transparent;color:var(--sub);font-weight:800;font-size:.68rem;text-align:left;padding:8px 4px;cursor:pointer}
 .rhythm-more-body{display:flex;flex-direction:column;gap:12px;margin-top:4px}
-.g-day-cal{grid-template-columns:1fr}
-.g-day-cal .tlcard{max-width:100%}
-@media(min-width:1025px){.tab-plan{display:flex}}
 .navb{width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:var(--card);cursor:pointer;color:var(--sub);font-size:1rem;flex:0 0 34px}
 .dchips{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;padding:4px;max-width:100%;flex:1;min-width:0}
 .dchips::-webkit-scrollbar{display:none}
@@ -235,7 +232,10 @@ h1.plan{font-size:1.9rem;font-weight:600;margin-top:12px}
 .view.on .card:nth-child(1){animation-delay:.02s}.view.on .card:nth-child(2){animation-delay:.07s}.view.on .card:nth-child(3){animation-delay:.12s}.view.on .card:nth-child(4){animation-delay:.17s}.view.on .card:nth-child(5){animation-delay:.22s}.view.on .card:nth-child(6){animation-delay:.27s}
 .grid{display:grid;gap:14px}
 .g-day{grid-template-columns:minmax(300px,370px) minmax(0,1fr)}
-@media(max-width:920px){.g-day{grid-template-columns:1fr}.g-day>.tlcard{order:-1}}
+.g-day.g-day-cal{grid-template-columns:1fr;width:100%}
+.g-day.g-day-cal .tlcard,.g-day.g-day-cal .tl{width:100%;max-width:none}
+.plan-shell{width:100%}
+@media(max-width:920px){.g-day:not(.g-day-cal){grid-template-columns:1fr}.g-day>.tlcard{order:-1}}
 .glance{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
 .glance .l{min-width:0;flex:1}
 .glance .l small{font-size:.62rem;color:var(--sub);font-weight:700}
@@ -264,7 +264,7 @@ h6.lab{font-size:.64rem;color:var(--sub);font-weight:800;letter-spacing:.06em;te
 
 /* timeline */
 .tlcard{padding:14px 6px}
-.tl{position:relative;padding:8px 40px 8px 56px}
+.tl{position:relative;width:100%;padding:8px 40px 8px 56px}
 .sun{display:flex;align-items:center;gap:6px;color:var(--sub);font-size:.66rem;font-weight:700;padding:4px 0 10px 14px}
 .hourlab{position:absolute;left:2px;font-size:.56rem;color:var(--dim);font-weight:700;transform:translateY(-50%);width:44px}
 .rail{position:absolute;right:10px;top:14px;bottom:14px;width:10px;border-radius:100px;opacity:.95}
