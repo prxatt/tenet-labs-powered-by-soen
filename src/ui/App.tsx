@@ -36,7 +36,9 @@ export default function App() {
   const app = useApp();
   const touch = useTouchDevice();
   const [loaded, setLoaded] = useState(false);
-  const [tab, setTab] = useState<Tab>('rhythm');
+  const [tab, setTab] = useState<Tab>(() =>
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 1024px)').matches ? 'plan' : 'plan',
+  );
   const [seg, setSeg] = useState<PlanSeg>('day');
   const [cur, setCur] = useState<Date>(() => clampToCamp(new Date()));
   const [sheet, setSheet] = useState<SheetReq | null>(null);
@@ -45,7 +47,7 @@ export default function App() {
   const ouraErr = getOuraError();
 
   useEffect(() => {
-    setTab(touch ? 'rhythm' : 'plan');
+    if (touch) setTab('plan');
   }, [touch]);
 
   useEffect(() => {

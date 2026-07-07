@@ -48,7 +48,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",Roboto,"Segoe UI
 
 /* Plan tab — mobile: compact chrome, full-bleed timeline */
 @media(max-width:1024px){
-.app-plan-mobile,.app[data-tab="plan"][data-touch="1"]{--dock-pad:108px;padding-left:max(10px,env(safe-area-inset-left));padding-right:max(10px,env(safe-area-inset-right))}
+.app-plan-mobile,.app[data-tab="plan"][data-touch="1"]{--dock-pad:96px;padding-left:max(10px,env(safe-area-inset-left));padding-right:max(10px,env(safe-area-inset-right))}
 .app-plan-mobile .brand,.app[data-tab="plan"][data-touch="1"] .brand{display:none}
 .app-plan-mobile .top,.app[data-tab="plan"][data-touch="1"] .top{justify-content:flex-end}
 .app-plan-mobile .greeting-bar,.app[data-tab="plan"][data-touch="1"] .greeting-bar{margin-top:4px}
@@ -63,6 +63,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",Roboto,"Segoe UI
 .app-plan-mobile .blkT.focus,.app[data-tab="plan"][data-touch="1"] .blkT.focus{left:48px !important;width:calc(100% - 76px) !important}
 .app-plan-mobile .blkT.ov-narrow b,.app[data-tab="plan"][data-touch="1"] .blkT.ov-narrow b{font-size:clamp(.6rem,2.9vw,.7rem);-webkit-line-clamp:2}
 .app-plan-mobile .blkT.ov,.app[data-tab="plan"][data-touch="1"] .blkT.ov{box-shadow:0 0 0 1px var(--bg),0 2px 6px rgba(60,55,40,.12),2px 0 0 rgba(60,55,40,.06)}
+.app-plan-mobile .sync-banner,.app[data-tab="plan"][data-touch="1"] .sync-banner{margin-top:6px;padding:8px 10px;font-size:.64rem}
 }
 .top{display:flex;align-items:center;justify-content:space-between;padding:6px 2px 2px;gap:10px}
 .brand{font-weight:800;font-size:.85rem;letter-spacing:.24em;line-height:1.3}
