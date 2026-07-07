@@ -56,7 +56,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",Roboto,"Segoe UI
 .app-plan-mobile .greeting-bar{margin-top:4px}
 .app-plan-mobile .tabs{margin-top:8px}
 .app-plan-mobile .seg{max-width:100%}
-.app-plan-mobile .dstrip-scroll .dchips{mask-image:linear-gradient(90deg,transparent 0,#000 12px,#000 calc(100% - 12px),transparent 100%)}
+.app-plan-mobile .dstrip-scroll .dchips{mask-image:none}
 .app-plan-mobile .tlcard{padding:10px 0}
 .app-plan-mobile .tl{padding:8px 28px 8px 48px}
 .app-plan-mobile .nowline{left:42px;right:22px}
@@ -115,8 +115,8 @@ h1.plan{font-size:1.9rem;font-weight:600;margin-top:12px}
 .seg button.on{background:var(--ink);color:#fff;box-shadow:0 3px 10px rgba(28,28,24,.28)}
 .seg button:active{transform:scale(.94)}
 .dstrip{display:flex;align-items:flex-end;justify-content:center;margin:8px 0 4px;position:relative}
-.dstrip-scroll .dchips{scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;mask-image:linear-gradient(90deg,transparent 0,#000 24px,#000 calc(100% - 24px),transparent 100%)}
-.dchip-wrap{flex:0 0 auto;scroll-snap-align:center;text-align:center}
+.dstrip-scroll .dchips{scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch}
+.dchip-wrap{flex:0 0 auto;scroll-snap-align:center;text-align:center;min-width:0}
 .dmonth{font-size:.52rem;font-weight:800;color:var(--dim);letter-spacing:.08em;text-transform:uppercase;margin-bottom:2px;min-height:14px}
 .dchips-spring .dchip{transition:transform .28s var(--spring),background .2s}
 .dchips-spring .dchip:active{transform:scale(.92)}
@@ -219,12 +219,16 @@ h1.plan{font-size:1.9rem;font-weight:600;margin-top:12px}
 .navb{width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:var(--card);cursor:pointer;color:var(--sub);font-size:1rem;flex:0 0 34px}
 .dchips{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;padding:4px;max-width:100%;flex:1;min-width:0}
 .dchips::-webkit-scrollbar{display:none}
-.dchip{flex:0 0 auto;width:48px;text-align:center;padding:7px 0 8px;border-radius:16px;cursor:pointer}
+.dchip{flex:0 0 auto;width:100%;max-width:48px;margin:0 auto;text-align:center;padding:7px 0 8px;border-radius:16px;cursor:pointer}
 .dchip small{display:block;font-size:.58rem;color:var(--sub);font-weight:700}
 .dchip b{display:block;font-size:.92rem;margin-top:2px}
 .dchip.on{background:var(--ink);color:#fff}
 .dchip.on small{color:#bbb}
 .dchip .dot{width:4px;height:4px;border-radius:50%;background:var(--green2);margin:3px auto 0}
+.dstrip-weeks .dchips{display:flex;gap:0;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;scrollbar-width:none;width:100%;max-width:100%;padding:4px 0;flex:1 1 auto}
+.dstrip-weeks .dchips::-webkit-scrollbar{display:none}
+.dweek{flex:0 0 100%;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;scroll-snap-align:start;scroll-snap-stop:always;padding:0 2px;box-sizing:border-box}
+.dweek .dchip-wrap{min-width:0}
 
 .card{background:var(--glass);border:1px solid var(--gline);outline:1px solid var(--line);outline-offset:-1px;border-radius:var(--r);padding:18px;box-shadow:var(--gsh);min-width:0;backdrop-filter:blur(22px) saturate(1.35);-webkit-backdrop-filter:blur(22px) saturate(1.35);transition:transform .35s var(--spring),box-shadow .35s;animation:cardin .55s var(--spring) backwards}
 .card:hover{transform:translateY(-1px)}
