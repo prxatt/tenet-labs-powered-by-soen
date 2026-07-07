@@ -14,7 +14,7 @@ export default function SyncBanner({ onSettings }: { onSettings: () => void }) {
 
   return (
     <div className="sync-banner" role="status">
-      <span>Check-offs stay on this device until you sign in.</span>
+      <span>Optional: sign in to sync check-offs across your devices. Oura works without signing in.</span>
       <button type="button" onClick={onSettings}>Sign in</button>
     </div>
   );

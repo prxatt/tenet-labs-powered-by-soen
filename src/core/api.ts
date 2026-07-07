@@ -137,7 +137,10 @@ let lastOuraError: string | null = null;
 let lastOuraErrorAt = 0;
 
 export function getOuraError(): string | null {
-  if (lastOuraError && Date.now() - lastOuraErrorAt < 300000) return lastOuraError;
+  if (lastOuraError && Date.now() - lastOuraErrorAt < 300000) {
+    if (/sign in/i.test(lastOuraError) && getLocalKeys().oura) return null;
+    return lastOuraError;
+  }
   return null;
 }
 
@@ -178,7 +181,10 @@ export async function syncOura(): Promise<OuraSyncResult> {
     }
   }
 
-  if (srv.error === 'no_auth') { lastOuraError = 'Sign in + add Oura token in Settings'; lastOuraErrorAt = Date.now(); return 'no_auth'; }
+  if (srv.error === 'no_auth') {
+    if (localTok) { /* fall through to local fetch */ }
+    else { lastOuraError = 'Add Oura token in Settings'; lastOuraErrorAt = Date.now(); return 'nokey'; }
+  }
   if (srv.error === 'no_token') { lastOuraError = 'Add Oura token in Settings'; lastOuraErrorAt = Date.now(); return 'nokey'; }
   if (srv.error === 'network') { lastOuraError = 'Network error'; lastOuraErrorAt = Date.now(); return 'network'; }
   lastOuraError = 'No Oura token';
