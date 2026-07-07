@@ -153,9 +153,7 @@ export default function App() {
         <div className={'view' + (tab === 'roadmap' ? ' on' : '')}>{tab === 'roadmap' && <RoadmapPage />}</div>
       </div>
 
-      {loaded && (
-        <CommandDock cur={cur} goToDate={goToDate} openSheet={openSheet} onSoen={q => setSoenQ(q)} />
-      )}
+      <CommandDock cur={cur} goToDate={goToDate} openSheet={openSheet} onSoen={q => setSoenQ(q)} />
 
       {soenQ && <SoenModal question={soenQ} onClose={() => setSoenQ(null)} />}
 

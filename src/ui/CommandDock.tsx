@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { DN, addD, key } from '../core/dates';
 import { eventParsePrompt, parseEvents } from '../core/ai';
 import { aiCall } from '../core/api';
@@ -130,8 +131,8 @@ export default function CommandDock({ cur, goToDate, openSheet, onSoen }: {
     onSoen(text);
   };
 
-  return (
-    <div className="cmdwrap">
+  return createPortal(
+    <div className="cmdwrap" role="search">
       <div id="chips">
         <span onClick={() => setV('plan: ')}>＋ plan:</span>
         <span onClick={() => setV('recipe: ')}>＋ recipe:</span>
@@ -145,6 +146,7 @@ export default function CommandDock({ cur, goToDate, openSheet, onSoen }: {
           placeholder={busy ? 'SOEN is thinking…' : 'Ask SOEN… · plan: dinner Fri 7pm · recipe: katsu'} style={{ flex: 1 }} />
         <button className="go" onClick={() => void run()}>{busy ? '…' : 'Ask'}</button>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
