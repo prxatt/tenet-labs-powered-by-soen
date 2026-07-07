@@ -101,7 +101,7 @@ export default function App() {
       <div id="amb"><i className="a1" /><i className="a2" /><i className="a3" /></div>
       {!loaded && <Loader onDone={() => setLoaded(true)} />}
       <div
-        className={'app' + (tab === 'plan' ? ' app-plan-mobile' : '')}
+        className={'app' + (tab === 'plan' ? ' app-plan' + (touch ? ' app-plan-mobile' : '') : '')}
         data-tab={tab}
         data-touch={touch ? '1' : '0'}
       >
