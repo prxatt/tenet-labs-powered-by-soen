@@ -17,7 +17,7 @@ function scoreLabel(n: number | null): string {
   return 'Go easy';
 }
 
-export default function GreetingBar({ tab }: { tab: 'rhythm' | 'plan' | 'fuel' | 'roadmap' }) {
+export default function GreetingBar({ tab, touch = false }: { tab: 'rhythm' | 'plan' | 'fuel' | 'roadmap'; touch?: boolean }) {
   const { plan, oura } = useApp();
   const today = new Date();
   const sc = soenScore(today, plan, oura);
@@ -46,8 +46,14 @@ export default function GreetingBar({ tab }: { tab: 'rhythm' | 'plan' | 'fuel' |
   if (tab === 'plan') {
     return (
       <div className="greeting-bar">
-        <h1 className="plan serif">Plan</h1>
-        <p className="greeting-sub">Week {weekIdx(today) + 1} · {PHASE[weekIdx(today)]} phase</p>
+        {touch ? (
+          <p className="greeting-sub plan-phase">Week {weekIdx(today) + 1} · {PHASE[weekIdx(today)]} phase</p>
+        ) : (
+          <>
+            <h1 className="plan serif">Plan</h1>
+            <p className="greeting-sub">Week {weekIdx(today) + 1} · {PHASE[weekIdx(today)]} phase</p>
+          </>
+        )}
       </div>
     );
   }

@@ -7,13 +7,21 @@ import { findRecipe } from '../../core/recipes';
 import { ghStatus, syncOura, getOuraError, type RepoStatus } from '../../core/api';
 import { store } from '../../core/store';
 import { useApp, toast } from '../hooks';
+import { useTouchDevice } from '../hooks/useTouchDevice';
 import type { SheetReq } from '../App';
 
 const PX = 38, T0 = 7, T1 = 23.5;
 
+function blockHeight(dur: number): number {
+  const slotPx = dur * PX;
+  if (slotPx < 18) return Math.max(12, slotPx - 2);
+  return Math.max(16, slotPx - 4);
+}
+
 /* ---------------- timeline ---------------- */
 export function Timeline({ cur, openSheet }: { cur: Date; openSheet: (s: SheetReq) => void }) {
   const { plan, oura } = useApp();
+  const touch = useTouchDevice();
   const [focus, setFocus] = useState<string | null>(null);
   const B = blocksFor(cur, plan);
   const lanes = assignLanes(B);
@@ -24,12 +32,14 @@ export function Timeline({ cur, openSheet }: { cur: Date; openSheet: (s: SheetRe
   const now = new Date();
   const nh = now.getHours() + now.getMinutes() / 60;
   const isToday = key(now) === k;
-  const GUT = 2;
+  const TL_LEFT = touch ? 48 : 56;
+  const TL_GUTTER = touch ? 76 : 96;
+  const GUT = touch ? 4 : 2;
 
   useEffect(() => { setFocus(null); }, [k]);
 
   return (
-    <div className="card tlcard" style={{ padding: '14px 6px' }}>
+    <div className="card tlcard">
       <div className="sun">Sunrise 6:02 AM · rail = your Oura day (sleep → stress → activity)</div>
       <div className="tl" style={{ height: (T1 - T0) * PX + 20 }} onClick={() => setFocus(null)}>
         <div className="rail" title="Sleep → Readiness → Stress → Activity (Oura)"
@@ -40,7 +50,7 @@ export function Timeline({ cur, openSheet }: { cur: Date; openSheet: (s: SheetRe
         {lanes.map(({ b, col, cols }) => {
           const dk = b.date + '|' + b.id;
           const isDone = !!plan.done[dk];
-          const hpx = Math.max(22, b.dur * PX - 4);
+          const hpx = blockHeight(b.dur);
           const focused = focus === dk;
           const narrow = cols > 1 && !focused;
           const cls = ['blkT', b.cls,
@@ -49,14 +59,14 @@ export function Timeline({ cur, openSheet }: { cur: Date; openSheet: (s: SheetRe
             cols > 1 ? 'ov' : '',
             narrow ? 'ov-narrow' : '',
             focused ? 'focus' : ''].filter(Boolean).join(' ');
-          const colW = `calc((100% - 96px - ${(cols - 1) * GUT}px) / ${cols})`;
+          const colW = `calc((100% - ${TL_GUTTER}px - ${(cols - 1) * GUT}px) / ${cols})`;
           return (
             <div key={dk + col} className={cls} role="button" aria-label={b.ti}
               style={{
                 top: (b.t - T0) * PX + 10, height: hpx,
-                left: `calc(56px + ${col} * (${colW} + ${GUT}px))`,
+                left: `calc(${TL_LEFT}px + ${col} * (${colW} + ${GUT}px))`,
                 width: colW,
-                zIndex: focused ? 60 : 2 + col,
+                zIndex: focused ? 60 : 10 + col + Math.round((1 / b.dur) * 5),
               }}
               onClick={e => {
                 e.stopPropagation();

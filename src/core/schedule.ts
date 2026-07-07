@@ -101,6 +101,7 @@ export function assignLanes(B: Block[]): LaneBlock[] {
   });
   for (let ci = 0; ci < nc; ci++) {
     const C = evs.filter(e => e.cl === ci);
+    C.sort((a, b) => a.b.t - b.b.t || b.b.dur - a.b.dur);
     const ends: number[] = [];
     C.forEach(e => {
       let c = 0;

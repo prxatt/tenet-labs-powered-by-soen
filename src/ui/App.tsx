@@ -13,7 +13,6 @@ import Toast from './Toast';
 import CommandDock from './CommandDock';
 import GreetingBar from './GreetingBar';
 import LiveChip from './LiveChip';
-import SyncBanner from './SyncBanner';
 import SoenModal from './SoenModal';
 import PlanPage, { RhythmPage, type PlanSeg } from './PlanPage';
 import FuelPage from './fuel/FuelPage';
@@ -88,7 +87,11 @@ export default function App() {
     <>
       <div id="amb"><i className="a1" /><i className="a2" /><i className="a3" /></div>
       {!loaded && <Loader onDone={() => setLoaded(true)} />}
-      <div className="app">
+      <div
+        className={'app' + (touch && tab === 'plan' ? ' app-plan-mobile' : '')}
+        data-tab={tab}
+        data-touch={touch ? '1' : '0'}
+      >
         <div className="top">
           <div className="brand">TENET LABS<small>POWERED BY SOEN</small></div>
           <div className="right">
@@ -97,8 +100,7 @@ export default function App() {
           </div>
         </div>
 
-        <GreetingBar tab={tab} />
-        <SyncBanner onSettings={() => openSheet({ type: 'settings' })} />
+        <GreetingBar tab={tab} touch={touch} />
 
         {atGym && isGymDay && (
           <div id="gymBanner">
