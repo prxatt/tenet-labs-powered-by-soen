@@ -7,6 +7,7 @@ import { key, addD } from './dates';
 import { store } from './store';
 import { ensureSession, hasSupabase } from './sync';
 import { parseRecipe, recipeImportPrompt } from './ai';
+import { getOuraOAuth, ouraRedirectUri, setOuraOAuth, type OuraTokens } from './ouraOAuth';
 
 /* ---- local fallback keys (used only when not signed into the backend) ---- */
 const LS_KEYS = 'tl7_keys';
@@ -18,6 +19,77 @@ export function setLocalKeys(k: LocalKeys) {
   const clean = { ...k };
   if (clean.oura) clean.oura = clean.oura.replace(/\s+/g, '');
   localStorage.setItem(LS_KEYS, JSON.stringify({ ...getLocalKeys(), ...clean }));
+}
+
+export function hasOuraConnected(): boolean {
+  return !!(getOuraOAuth()?.access_token || getLocalKeys().oura);
+}
+
+export async function exchangeOuraCode(code: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const r = await fetch('/api/soen', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        service: 'oura_oauth_exchange',
+        code,
+        redirect_uri: ouraRedirectUri(),
+      }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (data.error) return { ok: false, error: String(data.error) };
+    if (!data.access_token) return { ok: false, error: 'no_token' };
+    setOuraOAuth({
+      access_token: data.access_token,
+      refresh_token: data.refresh_token,
+      expires_at: Date.now() + (Number(data.expires_in) || 86400) * 1000,
+    });
+    const s = await ensureSession();
+    if (s) {
+      await import('./sync').then(m => m.saveSecrets({
+        oura: data.access_token,
+        ...(data.refresh_token && { ouraRefresh: data.refresh_token }),
+      }));
+    }
+    return { ok: true };
+  } catch {
+    return { ok: false, error: 'network' };
+  }
+}
+
+async function refreshOuraAccess(): Promise<string | null> {
+  const o = getOuraOAuth();
+  if (!o?.refresh_token) return null;
+  try {
+    const r = await fetch('/api/soen', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ service: 'oura_refresh', refresh_token: o.refresh_token }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!data.access_token) return null;
+    const next: OuraTokens = {
+      access_token: data.access_token,
+      refresh_token: data.refresh_token || o.refresh_token,
+      expires_at: Date.now() + (Number(data.expires_in) || 86400) * 1000,
+    };
+    setOuraOAuth(next);
+    return next.access_token;
+  } catch {
+    return null;
+  }
+}
+
+export async function resolveOuraAccessToken(): Promise<string | null> {
+  const oauth = getOuraOAuth();
+  if (oauth) {
+    if (Date.now() < oauth.expires_at - 120_000) return oauth.access_token;
+    const refreshed = await refreshOuraAccess();
+    if (refreshed) return refreshed;
+  }
+  const legacy = getLocalKeys().oura?.trim();
+  if (legacy) return legacy;
+  return oauth?.access_token || null;
 }
 
 export interface ServerResult {
@@ -164,7 +236,6 @@ export function getOuraError(): string | null {
 
 export async function syncOura(): Promise<OuraSyncResult> {
   const end = key(addD(new Date(), 1)), start = key(addD(new Date(), -13));
-  const localTok = getLocalKeys().oura?.trim();
 
   const apply = (payload: Record<string, unknown>): 'ok' => {
     store.setOura(mergeOura(store.get().oura, payload));
@@ -172,42 +243,39 @@ export async function syncOura(): Promise<OuraSyncResult> {
     return 'ok';
   };
 
+  const accessTok = await resolveOuraAccessToken();
+
   const s = await ensureSession();
-  if (s) {
+  if (s && accessTok) {
     const srv = await serverCall({ service: 'oura', start, end });
     if (srv.ok && srv.data) return apply(srv.data);
-    if (srv.error === 'oura_rejected') {
-      lastOuraError = 'Invalid Oura token — create a new Personal Access Token at cloud.ouraring.com';
-      lastOuraErrorAt = Date.now();
-      return 'oura_api_error';
-    }
   }
 
-  if (!localTok) {
-    lastOuraError = 'Add Oura token in Settings';
+  if (!accessTok) {
+    lastOuraError = 'Connect Oura in Settings';
     lastOuraErrorAt = Date.now();
     return 'nokey';
   }
 
-  const proxy = await ouraProxyCall(localTok, start, end);
+  const proxy = await ouraProxyCall(accessTok, start, end);
   if (proxy.ok && proxy.data) return apply(proxy.data);
 
   if (proxy.error === 'oura_rejected') {
-    lastOuraError = 'Invalid Oura token — create a new Personal Access Token at cloud.ouraring.com';
+    lastOuraError = 'Oura connection expired — tap Connect with Oura again';
     lastOuraErrorAt = Date.now();
     return 'oura_api_error';
   }
   if (proxy.error === 'oura_empty') {
-    lastOuraError = 'Oura returned no data — ring may still be syncing; try again in an hour';
+    lastOuraError = 'No Oura data yet — ring may still be syncing';
     lastOuraErrorAt = Date.now();
     return 'err';
   }
   if (proxy.error === 'network') {
-    lastOuraError = 'Network error — check connection';
+    lastOuraError = 'Network error';
     lastOuraErrorAt = Date.now();
     return 'network';
   }
-  lastOuraError = 'Oura sync failed — try a new token';
+  lastOuraError = 'Oura sync failed';
   lastOuraErrorAt = Date.now();
   return 'oura_api_error';
 }

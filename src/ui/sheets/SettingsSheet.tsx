@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
-import { DEFAULT_OLLAMA_MODEL, getLocalKeys, OLLAMA_MODELS, setLocalKeys, syncOura } from '../../core/api';
+import { DEFAULT_OLLAMA_MODEL, getLocalKeys, hasOuraConnected, OLLAMA_MODELS, setLocalKeys, syncOura } from '../../core/api';
+import { startOuraConnect } from '../../core/ouraOAuth';
 import { ensureSession, hasSupabase, migrateLocalSecrets, saveSecrets, secretsStatus, signInMagic, signOut, supa } from '../../core/sync';
 import { store } from '../../core/store';
 import { useApp, toast } from '../hooks';
@@ -19,7 +20,6 @@ export default function SettingsSheet({ onClose }: { onClose: () => void }) {
   const app = useApp();
   const prefs = app.plan.prefs;
   const lk = getLocalKeys();
-  const [oura, setOura] = useState('');
   const [gem, setGem] = useState('');
   const [groq, setGroq] = useState('');
   const [github, setGithub] = useState('');
@@ -29,7 +29,7 @@ export default function SettingsSheet({ onClose }: { onClose: () => void }) {
   const [emailErr, setEmailErr] = useState('');
   const [ouraBusy, setOuraBusy] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
-  const [have, setHave] = useState({ oura: !!lk.oura, gemini: !!lk.gemini, groq: !!lk.groq, github: !!lk.github });
+  const [have, setHave] = useState({ oura: hasOuraConnected(), gemini: !!lk.gemini, groq: !!lk.groq, github: !!lk.github });
   const [repoA, setRepoA] = useState(prefs.repoA || '');
   const [repoB, setRepoB] = useState(prefs.repoB || 'prxatt/tenet-labs-powered-by-soen');
   const [ollama, setOllama] = useState(!!prefs.ollama);
@@ -59,31 +59,11 @@ export default function SettingsSheet({ onClose }: { onClose: () => void }) {
 
   const ouraSyncToast = (r: Awaited<ReturnType<typeof syncOura>>) => {
     if (r === 'ok') return 'Oura synced ✓';
-    if (r === 'oura_api_error') return 'Token not accepted — get a new Personal Access Token at cloud.ouraring.com';
+    if (r === 'oura_api_error') return 'Oura session expired — tap Connect with Oura again';
+    if (r === 'nokey') return 'Tap Connect with Oura first';
     if (r === 'err') return 'No Oura data yet — try again later';
-    if (r === 'network') return 'No network — try on Wi‑Fi';
+    if (r === 'network') return 'No network';
     return 'Could not sync Oura';
-  };
-
-  /** Oura does NOT need sign-in. Saves on this device and syncs immediately. */
-  const saveOura = async () => {
-    const tok = oura.trim() || getLocalKeys().oura || '';
-    if (!tok) { toast('Paste your Oura Personal Access Token first'); return; }
-    setOuraBusy(true);
-    if (oura.trim()) {
-      setLocalKeys({ oura: tok });
-      setHave(h => ({ ...h, oura: true }));
-      setOura('');
-    }
-
-    const r = await syncOura();
-    setOuraBusy(false);
-    toast(ouraSyncToast(r));
-
-    if (signedIn && oura.trim()) {
-      const { error } = await saveSecrets({ oura: tok });
-      if (error) toast('Saved locally; cloud backup failed: ' + error);
-    }
   };
 
   const saveOtherKeys = async () => {
@@ -173,15 +153,21 @@ export default function SettingsSheet({ onClose }: { onClose: () => void }) {
 
       {/* ---- Oura first: no account required ---- */}
       <div className="sec sec-oura">
-        <h6>OURA — NO SIGN-IN NEEDED</h6>
+        <h6>OURA</h6>
         <p style={{ fontSize: '.68rem', color: 'var(--sub)', marginBottom: 8 }}>
-          Get a token at <b>cloud.ouraring.com</b> → Personal Access Tokens. Paste it here — works immediately on this device.
-          {have.oura ? <span style={{ color: 'var(--green)', fontWeight: 800 }}> Token saved{K(true)}</span> : null}
+          Oura removed personal tokens in 2025 — tap <b>Connect with Oura</b> to sign in with your Oura account.
+          {have.oura ? <span style={{ color: 'var(--green)', fontWeight: 800 }}> Connected{K(true)}</span> : null}
         </p>
-        <input type="password" placeholder="Oura Personal Access Token" value={oura} onChange={e => setOura(e.target.value)} />
-        <button className="btnP" disabled={ouraBusy} onClick={() => void saveOura()}>
-          {ouraBusy ? 'Syncing Oura…' : oura.trim() ? 'Save & sync Oura' : have.oura ? 'Sync Oura now' : 'Save & sync Oura'}
-        </button>
+        <button className="btnP" onClick={() => {
+          try { startOuraConnect(); } catch (e) { toast(String(e instanceof Error ? e.message : e)); }
+        }}>Connect with Oura</button>
+        <button className="btnS" disabled={ouraBusy} onClick={async () => {
+          setOuraBusy(true);
+          const r = await syncOura();
+          setOuraBusy(false);
+          toast(ouraSyncToast(r));
+          setHave(h => ({ ...h, oura: hasOuraConnected() }));
+        }}>{ouraBusy ? 'Syncing…' : 'Sync Oura now'}</button>
       </div>
 
       {/* ---- Other keys ---- */}

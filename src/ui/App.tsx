@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import type { Block, Recipe } from '../core/types';
 import { clampToCamp, key } from '../core/dates';
-import { getOuraError, syncOura } from '../core/api';
+import { getOuraError, exchangeOuraCode, syncOura } from '../core/api';
+import { clearOuraCallbackUrl, parseOuraCallback } from '../core/ouraOAuth';
 import { gymVisitsThisWeek, recordGeoSample } from '../core/geoLocal';
 import { refreshBehavior } from '../core/habits';
 import { initSync } from '../core/sync';
 import { store } from '../core/store';
-import { useApp } from './hooks';
+import { useApp, toast } from './hooks';
 import { useTouchDevice } from './hooks/useTouchDevice';
 import Loader from './Loader';
 import Toast from './Toast';
@@ -52,7 +53,17 @@ export default function App() {
 
   useEffect(() => {
     initSync();
-    void syncOura();
+    const cb = parseOuraCallback();
+    if (cb) {
+      void (async () => {
+        const r = await exchangeOuraCode(cb.code);
+        clearOuraCallbackUrl();
+        if (r.ok) { toast('Oura connected ✓'); await syncOura(); }
+        else toast('Oura connect failed — check Vercel OURA_CLIENT_ID/SECRET');
+      })();
+    } else {
+      void syncOura();
+    }
     const iv = setInterval(() => { void syncOura(); }, 30 * 60 * 1000);
     return () => clearInterval(iv);
   }, []);

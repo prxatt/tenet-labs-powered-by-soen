@@ -25,8 +25,10 @@ create table if not exists public.user_secrets (
   gemini_key text,
   groq_key text,
   github_token text,
+  oura_refresh_token text,
   updated_at timestamptz not null default now()
 );
+alter table public.user_secrets add column if not exists oura_refresh_token text;
 alter table public.user_secrets enable row level security;
 drop policy if exists "secrets owner insert" on public.user_secrets;
 create policy "secrets owner insert" on public.user_secrets for insert with check (auth.uid() = user_id);

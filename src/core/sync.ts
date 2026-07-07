@@ -7,6 +7,7 @@ import type { PlanState } from './types';
 import { store } from './store';
 import { pullBehavior } from './habits';
 import { getLocalKeys } from './api';
+import { getOuraOAuth } from './ouraOAuth';
 
 const URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const ANON = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
@@ -164,11 +165,12 @@ export function flushPush() {
 
 /* ---------------- API keys (write-only via RLS) ---------------- */
 
-export async function saveSecrets(secrets: { oura?: string; gemini?: string; groq?: string; github?: string }): Promise<{ error: string | null }> {
+export async function saveSecrets(secrets: { oura?: string; ouraRefresh?: string; gemini?: string; groq?: string; github?: string }): Promise<{ error: string | null }> {
   const s = await ensureSession();
   if (!s) return { error: 'Not signed in — open your magic link on this device, then try again' };
   const patch: Record<string, string> = {};
   if (secrets.oura) patch.oura_token = secrets.oura;
+  if (secrets.ouraRefresh) patch.oura_refresh_token = secrets.ouraRefresh;
   if (secrets.gemini) patch.gemini_key = secrets.gemini;
   if (secrets.groq) patch.groq_key = secrets.groq;
   if (secrets.github) patch.github_token = secrets.github;
@@ -184,9 +186,9 @@ export async function migrateLocalSecrets(): Promise<void> {
   const s = await ensureSession();
   if (!s) return;
   const lk = getLocalKeys();
-  if (!lk.oura && !lk.gemini && !lk.groq && !lk.github) return;
+  if (!lk.gemini && !lk.groq && !lk.github && (!lk.oura || !!getOuraOAuth())) return;
   await saveSecrets({
-    ...(lk.oura && { oura: lk.oura }),
+    ...(lk.oura && !getOuraOAuth() && { oura: lk.oura }),
     ...(lk.gemini && { gemini: lk.gemini }),
     ...(lk.groq && { groq: lk.groq }),
     ...(lk.github && { github: lk.github }),

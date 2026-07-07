@@ -12,6 +12,24 @@ export const config = { runtime: 'nodejs' };
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const OURA_CLIENT_ID = process.env.OURA_CLIENT_ID || process.env.VITE_OURA_CLIENT_ID || '';
+const OURA_CLIENT_SECRET = process.env.OURA_CLIENT_SECRET || '';
+
+async function ouraTokenRequest(body: Record<string, string>) {
+  const r = await fetch('https://api.ouraring.com/oauth/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams(body).toString(),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    const err: any = new Error('oura_oauth_' + r.status);
+    err.status = r.status;
+    err.detail = data;
+    throw err;
+  }
+  return data;
+}
 
 async function pullOura(tok: string, start: string, end: string) {
   const pairs: [string, string][] = [
@@ -53,6 +71,57 @@ export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'method' }); return; }
 
   const body = req.body || {};
+
+  /* OAuth: exchange authorization code for tokens (no sign-in needed). */
+  if (body.service === 'oura_oauth_exchange') {
+    const code = String(body.code || '').trim();
+    const redirect_uri = String(body.redirect_uri || '').trim();
+    if (!OURA_CLIENT_ID || !OURA_CLIENT_SECRET) {
+      res.status(200).json({ error: 'oura_not_configured' }); return;
+    }
+    if (!code || !redirect_uri) { res.status(400).json({ error: 'bad_request' }); return; }
+    try {
+      const data = await ouraTokenRequest({
+        grant_type: 'authorization_code',
+        code,
+        client_id: OURA_CLIENT_ID,
+        client_secret: OURA_CLIENT_SECRET,
+        redirect_uri,
+      });
+      res.status(200).json({
+        access_token: data.access_token,
+        refresh_token: data.refresh_token,
+        expires_in: data.expires_in,
+      });
+    } catch (e: any) {
+      res.status(200).json({ error: 'oura_oauth_failed', status: e?.status || 0 });
+    }
+    return;
+  }
+
+  if (body.service === 'oura_refresh') {
+    const refresh_token = String(body.refresh_token || '').trim();
+    if (!OURA_CLIENT_ID || !OURA_CLIENT_SECRET) {
+      res.status(200).json({ error: 'oura_not_configured' }); return;
+    }
+    if (!refresh_token) { res.status(400).json({ error: 'no_refresh' }); return; }
+    try {
+      const data = await ouraTokenRequest({
+        grant_type: 'refresh_token',
+        refresh_token,
+        client_id: OURA_CLIENT_ID,
+        client_secret: OURA_CLIENT_SECRET,
+      });
+      res.status(200).json({
+        access_token: data.access_token,
+        refresh_token: data.refresh_token || refresh_token,
+        expires_in: data.expires_in,
+      });
+    } catch {
+      res.status(200).json({ error: 'oura_refresh_failed' });
+    }
+    return;
+  }
 
   /* Oura from phone — browsers cannot call api.ouraring.com (CORS). Proxy here, no sign-in needed. */
   if (body.service === 'oura_proxy') {

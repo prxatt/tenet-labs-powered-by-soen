@@ -13,11 +13,17 @@ const supabaseAnon =
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
   '';
 
+const ouraClientId =
+  process.env.VITE_OURA_CLIENT_ID ||
+  process.env.OURA_CLIENT_ID ||
+  '';
+
 export default defineConfig({
   plugins: [react()],
   define: {
     'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(supabaseUrl),
     'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(supabaseAnon),
+    'import.meta.env.VITE_OURA_CLIENT_ID': JSON.stringify(ouraClientId),
   },
   build: { outDir: 'dist', sourcemap: false },
   server: { port: 5183 },
