@@ -1,4 +1,6 @@
-import { soenScore } from '../core/scoring';
+import { completion, soenScore } from '../core/scoring';
+import { blocksFor, isKey } from '../core/schedule';
+import { fmt, key, PHASE, weekIdx } from '../core/dates';
 import { useApp } from './hooks';
 
 function timeGreeting(): string {
@@ -15,10 +17,17 @@ function scoreLabel(n: number | null): string {
   return 'Go easy';
 }
 
-export default function GreetingBar({ tab }: { tab: 'rhythm' | 'fuel' | 'roadmap' }) {
+export default function GreetingBar({ tab }: { tab: 'rhythm' | 'plan' | 'fuel' | 'roadmap' }) {
   const { plan, oura } = useApp();
   const today = new Date();
   const sc = soenScore(today, plan, oura);
+  const k = key(today);
+  const B = blocksFor(today, plan);
+  const keyBlocks = B.filter(isKey);
+  const doneN = keyBlocks.filter(b => plan.done[b.date + '|' + b.id]).length;
+  const comp = completion(today, plan);
+  const nh = today.getHours() + today.getMinutes() / 60;
+  const nxt = B.find(b => b.t > nh && isKey(b) && !plan.done[b.date + '|' + b.id]);
 
   if (tab === 'fuel') {
     return (
@@ -31,6 +40,14 @@ export default function GreetingBar({ tab }: { tab: 'rhythm' | 'fuel' | 'roadmap
     return (
       <div className="greeting-bar">
         <h1 className="plan serif">Roadmap</h1>
+      </div>
+    );
+  }
+  if (tab === 'plan') {
+    return (
+      <div className="greeting-bar">
+        <h1 className="plan serif">Plan</h1>
+        <p className="greeting-sub">Week {weekIdx(today) + 1} · {PHASE[weekIdx(today)]} phase</p>
       </div>
     );
   }
@@ -55,6 +72,11 @@ export default function GreetingBar({ tab }: { tab: 'rhythm' | 'fuel' | 'roadmap
         </h1>
       </div>
       <p className="greeting-sub">{sc.lab}{sc.n == null ? '' : ` · ${scoreLabel(sc.n)}`}</p>
+      <div className="greeting-rhythm">
+        <span><b>{doneN}/{keyBlocks.length}</b> blocks done</span>
+        {comp != null && <span>· <b>{comp}%</b> complete</span>}
+        {nxt && <span className="greeting-next">· Next <b>{nxt.ti}</b> {fmt(nxt.t)}</span>}
+      </div>
     </div>
   );
 }

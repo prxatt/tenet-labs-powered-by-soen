@@ -143,19 +143,9 @@ export function getOuraError(): string | null {
 
 export async function syncOura(): Promise<OuraSyncResult> {
   const end = key(addD(new Date(), 1)), start = key(addD(new Date(), -13));
-  const srv = await serverCall({ service: 'oura', start, end });
-  if (srv.ok && srv.data?.readiness) {
-    store.setOura(mergeOura(store.get().oura, srv.data));
-    lastOuraError = null;
-    return 'ok';
-  }
-  if (srv.error === 'no_auth') { lastOuraError = 'Sign in to sync Oura server-side'; lastOuraErrorAt = Date.now(); return 'no_auth'; }
-  if (srv.error === 'no_token') { lastOuraError = 'Add Oura token in Settings'; lastOuraErrorAt = Date.now(); return 'nokey'; }
-  if (srv.error === 'network') { lastOuraError = 'Network error'; lastOuraErrorAt = Date.now(); return 'network'; }
-  const tok = getLocalKeys().oura;
-  if (!tok && srv.error) { lastOuraError = srv.error; lastOuraErrorAt = Date.now(); return srv.error === 'no_token' ? 'nokey' : 'err'; }
-  if (!tok) { lastOuraError = 'No Oura token'; lastOuraErrorAt = Date.now(); return 'nokey'; }
-  try {
+  const localTok = getLocalKeys().oura;
+
+  const fetchOura = async (tok: string): Promise<'ok'> => {
     const H = { headers: { Authorization: 'Bearer ' + tok } };
     const q = (p: string) =>
       fetch(`https://api.ouraring.com/v2/usercollection/${p}?start_date=${start}&end_date=${end}`, H)
@@ -166,11 +156,34 @@ export async function syncOura(): Promise<OuraSyncResult> {
     store.setOura(mergeOura(store.get().oura, { readiness, dailySleep, sleep, activity, stress }));
     lastOuraError = null;
     return 'ok';
-  } catch {
-    lastOuraError = 'Oura API error — check token';
-    lastOuraErrorAt = Date.now();
-    return 'oura_api_error';
+  };
+
+  const s = await ensureSession();
+  let srv: ServerResult = { ok: false };
+  if (s) {
+    srv = await serverCall({ service: 'oura', start, end });
+    if (srv.ok && srv.data?.readiness) {
+      store.setOura(mergeOura(store.get().oura, srv.data));
+      lastOuraError = null;
+      return 'ok';
+    }
   }
+
+  if (localTok) {
+    try { return await fetchOura(localTok); }
+    catch {
+      lastOuraError = 'Oura API error — regenerate token at cloud.ouraring.com';
+      lastOuraErrorAt = Date.now();
+      return 'oura_api_error';
+    }
+  }
+
+  if (srv.error === 'no_auth') { lastOuraError = 'Sign in + add Oura token in Settings'; lastOuraErrorAt = Date.now(); return 'no_auth'; }
+  if (srv.error === 'no_token') { lastOuraError = 'Add Oura token in Settings'; lastOuraErrorAt = Date.now(); return 'nokey'; }
+  if (srv.error === 'network') { lastOuraError = 'Network error'; lastOuraErrorAt = Date.now(); return 'network'; }
+  lastOuraError = 'No Oura token';
+  lastOuraErrorAt = Date.now();
+  return 'nokey';
 }
 
 /* ---------------- GitHub build tracker ---------------- */

@@ -110,6 +110,7 @@ class Store {
       if (done[dk]) delete done[dk]; else done[dk] = 1;
       return { done };
     });
+    void import('./sync').then(m => m.flushPush());
     void import('./habits').then(({ refreshBehavior }) =>
       import('./geoLocal').then(({ gymVisitsThisWeek }) => refreshBehavior(gymVisitsThisWeek())),
     );

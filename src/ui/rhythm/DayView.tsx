@@ -12,7 +12,7 @@ import type { SheetReq } from '../App';
 const PX = 38, T0 = 7, T1 = 23.5;
 
 /* ---------------- timeline ---------------- */
-function Timeline({ cur, openSheet }: { cur: Date; openSheet: (s: SheetReq) => void }) {
+export function Timeline({ cur, openSheet }: { cur: Date; openSheet: (s: SheetReq) => void }) {
   const { plan, oura } = useApp();
   const [focus, setFocus] = useState<string | null>(null);
   const B = blocksFor(cur, plan);
@@ -24,6 +24,7 @@ function Timeline({ cur, openSheet }: { cur: Date; openSheet: (s: SheetReq) => v
   const now = new Date();
   const nh = now.getHours() + now.getMinutes() / 60;
   const isToday = key(now) === k;
+  const GUT = 2;
 
   useEffect(() => { setFocus(null); }, [k]);
 
@@ -39,20 +40,23 @@ function Timeline({ cur, openSheet }: { cur: Date; openSheet: (s: SheetReq) => v
         {lanes.map(({ b, col, cols }) => {
           const dk = b.date + '|' + b.id;
           const isDone = !!plan.done[dk];
-          const hpx = Math.max(26, b.dur * PX - 4);
+          const hpx = Math.max(22, b.dur * PX - 4);
           const focused = focus === dk;
+          const narrow = cols > 1 && !focused;
           const cls = ['blkT', b.cls,
             isDone ? 'done' : '',
-            b.dur < 0.55 && !focused ? 'tiny' : '',
+            b.dur < 0.45 && narrow ? 'tiny' : '',
             cols > 1 ? 'ov' : '',
+            narrow ? 'ov-narrow' : '',
             focused ? 'focus' : ''].filter(Boolean).join(' ');
+          const colW = `calc((100% - 96px - ${(cols - 1) * GUT}px) / ${cols})`;
           return (
             <div key={dk + col} className={cls} role="button" aria-label={b.ti}
               style={{
                 top: (b.t - T0) * PX + 10, height: hpx,
-                left: `calc(56px + ${col} * ((100% - 96px) / ${cols}))`,
-                width: `calc((100% - 96px) / ${cols} - 5px)`,
-                zIndex: 2 + col,
+                left: `calc(56px + ${col} * (${colW} + ${GUT}px))`,
+                width: colW,
+                zIndex: focused ? 60 : 2 + col,
               }}
               onClick={e => {
                 e.stopPropagation();
@@ -61,10 +65,14 @@ function Timeline({ cur, openSheet }: { cur: Date; openSheet: (s: SheetReq) => v
                 openSheet({ type: 'event', block: b, shownOn: k });
               }}>
               <span className={'ckbox' + (isDone ? ' ok' : '')} title="Mark done"
-                onClick={e => { e.stopPropagation(); store.toggleDone(dk); toast(isDone ? 'Unchecked' : 'Done — score updated'); }} />
-              <b>{b.ti}</b>
-              {(b.dur >= 0.55 || focused) && <small>{fmt(b.t)}–{fmt(b.t + b.dur)}{b.su && (cols < 2 || focused) ? ' · ' + b.su : ''}</small>}
-              {b.dur >= 1.2 && (cols < 3 || focused) && <span className="ftag">{b.fo}{b.movedIn ? ' · moved' : ''}</span>}
+                onClick={e => { e.stopPropagation(); store.toggleDone(dk); toast(isDone ? 'Unchecked' : 'Done — synced'); }} />
+              <b title={b.ti}>{b.ti}</b>
+              {(!narrow || focused) && b.dur >= 0.45 && (
+                <small>{fmt(b.t)}–{fmt(b.t + b.dur)}{b.su && (cols < 2 || focused) ? ' · ' + b.su : ''}</small>
+              )}
+              {b.dur >= 1.2 && (!narrow || focused) && (cols < 3 || focused) && (
+                <span className="ftag">{b.fo}{b.movedIn ? ' · moved' : ''}</span>
+              )}
             </div>
           );
         })}
@@ -130,6 +138,7 @@ function Outstanding({ cur, openSheet }: { cur: Date; openSheet: (s: SheetReq) =
 
 function Suggest({ cur, openSheet }: { cur: Date; openSheet: (s: SheetReq) => void }) {
   const { plan, oura } = useApp();
+  const [open, setOpen] = useState(false);
   const k = key(cur);
   const o = oura[k] || {};
   const now = new Date();
@@ -147,9 +156,16 @@ function Suggest({ cur, openSheet }: { cur: Date; openSheet: (s: SheetReq) => vo
       : <>Day complete. Reading, cacao, lights out. Tomorrow is built.</>;
   }
   return (
-    <div className="card mt" id="nextCard"><h6 className="lab">SOEN SUGGESTS</h6>
-      <p>{txt}</p>
-      <button className="btnS" onClick={() => openSheet({ type: 'retune' })}>Retune my plan (SOEN AI)</button>
+    <div className="card mt" id="nextCard">
+      <button type="button" className="sug-toggle" onClick={() => setOpen(v => !v)}>
+        {open ? '▾ Hide SOEN suggestion' : '▸ SOEN suggestion for today'}
+      </button>
+      {open && (
+        <>
+          <p style={{ marginTop: 8 }}>{txt}</p>
+          <button className="btnS" onClick={() => openSheet({ type: 'retune' })}>Retune my plan (SOEN AI)</button>
+        </>
+      )}
     </div>
   );
 }
@@ -372,21 +388,36 @@ function LogCard({ cur, openSheet }: { cur: Date; openSheet: (s: SheetReq) => vo
   );
 }
 
-export default function DayView({ cur, openSheet }: { cur: Date; openSheet: (s: SheetReq) => void }) {
+export function RhythmDashboard({ cur, openSheet }: { cur: Date; openSheet: (s: SheetReq) => void }) {
+  return (
+    <div className="rhythm-dash">
+      <ScoreCard cur={cur} />
+      <Outstanding cur={cur} openSheet={openSheet} />
+      <RecordToday cur={cur} openSheet={openSheet} />
+      <Suggest cur={cur} openSheet={openSheet} />
+      <HealthStrip cur={cur} openSheet={openSheet} />
+      <FuelToday cur={cur} openSheet={openSheet} />
+      <LogCard cur={cur} openSheet={openSheet} />
+      <Capture cur={cur} />
+      <EnergyForecast cur={cur} />
+      <WeeklyFlow cur={cur} />
+      <BuildTracker />
+    </div>
+  );
+}
+
+export default function DayView({ cur, openSheet, timelineOnly }: { cur: Date; openSheet: (s: SheetReq) => void; timelineOnly?: boolean }) {
+  if (timelineOnly) {
+    return (
+      <div className="grid g-day g-day-cal">
+        <Timeline cur={cur} openSheet={openSheet} />
+      </div>
+    );
+  }
   return (
     <div className="grid g-day">
       <div>
-        <ScoreCard cur={cur} />
-        <Outstanding cur={cur} openSheet={openSheet} />
-        <RecordToday cur={cur} openSheet={openSheet} />
-        <Suggest cur={cur} openSheet={openSheet} />
-        <HealthStrip cur={cur} openSheet={openSheet} />
-        <FuelToday cur={cur} openSheet={openSheet} />
-        <LogCard cur={cur} openSheet={openSheet} />
-        <Capture cur={cur} />
-        <EnergyForecast cur={cur} />
-        <WeeklyFlow cur={cur} />
-        <BuildTracker />
+        <RhythmDashboard cur={cur} openSheet={openSheet} />
       </div>
       <Timeline cur={cur} openSheet={openSheet} />
     </div>

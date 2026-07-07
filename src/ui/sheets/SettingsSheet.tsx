@@ -1,16 +1,16 @@
 import { useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { DEFAULT_OLLAMA_MODEL, getLocalKeys, OLLAMA_MODELS, setLocalKeys, syncOura } from '../../core/api';
-import { ensureSession, hasSupabase, saveSecrets, secretsStatus, signInMagic, signOut, supa } from '../../core/sync';
+import { ensureSession, hasSupabase, migrateLocalSecrets, saveSecrets, secretsStatus, signInMagic, signOut, supa } from '../../core/sync';
 import { store } from '../../core/store';
 import { useApp, toast } from '../hooks';
 import Sheet from '../Sheet';
 
-const COOLDOWN_SEC = 60;
+const COOLDOWN_SEC = 15;
 
 function friendlyAuthError(msg: string): string {
   if (/rate limit|over_email_send_rate_limit/i.test(msg)) {
-    return 'Too many emails — wait ~60 minutes or open an earlier magic link from your inbox.';
+    return 'Email limit hit — open your latest magic link from inbox (links expire). Try again in ~15 min.';
   }
   return msg;
 }
@@ -49,7 +49,9 @@ export default function SettingsSheet({ onClose }: { onClose: () => void }) {
   }, [cooldown]);
 
   useEffect(() => {
-    if (signedIn) void secretsStatus().then(s => setHave(h => ({
+    if (!signedIn) return;
+    void migrateLocalSecrets();
+    void secretsStatus().then(s => setHave(h => ({
       oura: h.oura || s.oura, gemini: h.gemini || s.gemini, groq: h.groq || s.groq, github: h.github || s.github,
     })));
   }, [signedIn]);

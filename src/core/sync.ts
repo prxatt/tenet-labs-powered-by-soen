@@ -6,6 +6,7 @@ import { createClient, type SupabaseClient, type Session } from '@supabase/supab
 import type { PlanState } from './types';
 import { store } from './store';
 import { pullBehavior } from './habits';
+import { getLocalKeys } from './api';
 
 const URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const ANON = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
@@ -40,16 +41,40 @@ export async function ensureSession(): Promise<Session | null> {
 }
 
 export async function signInMagic(email: string): Promise<{ error: string | null }> {
+  const redirect = window.location.origin + window.location.pathname;
   const { error } = await supa().auth.signInWithOtp({
     email,
-    options: { emailRedirectTo: window.location.origin },
+    options: { emailRedirectTo: redirect },
   });
   return { error: error?.message ?? null };
 }
 
 export async function signOut() { if (hasSupabase()) await supa().auth.signOut(); }
 
-/* ---------------- plan state sync (last-write-wins) ---------------- */
+/* ---------------- plan merge (done keys union across devices) ---------------- */
+
+function mergePlans(local: PlanState, remote: PlanState, remoteAt: number): PlanState {
+  const localAt = local.updatedAt || 0;
+  const done = { ...remote.done, ...local.done };
+  if (remoteAt > localAt) {
+    return {
+      ...remote,
+      done,
+      todos: { ...local.todos, ...remote.todos },
+      ouraData: remote.ouraData || local.ouraData,
+      updatedAt: remoteAt,
+    };
+  }
+  return {
+    ...local,
+    done,
+    todos: { ...remote.todos, ...local.todos },
+    ouraData: local.ouraData || remote.ouraData,
+    updatedAt: Math.max(localAt, remoteAt),
+  };
+}
+
+/* ---------------- plan state sync ---------------- */
 
 let pushTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -64,19 +89,20 @@ export async function pullPlan(): Promise<void> {
   const { data, error } = await supa()
     .from('plan_state').select('data, updated_at').eq('user_id', s.user.id).maybeSingle();
   if (error) { store.setSync('err'); return; }
+  const local = store.get().plan;
   if (data?.data) {
     const remote = data.data as PlanState;
     const remoteAt = remote.updatedAt || new Date(data.updated_at).getTime();
-    if (remoteAt > (store.get().plan.updatedAt || 0)) {
-      store.replacePlan({ ...remote, updatedAt: remoteAt });
-      if (remote.ouraData && Object.keys(remote.ouraData).length) {
-        store.setOura(remote.ouraData, false);
-      }
-    } else if ((store.get().plan.updatedAt || 0) > remoteAt) {
-      await pushNow(store.get().plan);
+    const merged = mergePlans(local, remote, remoteAt);
+    store.replacePlan(merged);
+    if (merged.ouraData && Object.keys(merged.ouraData).length) {
+      store.setOura(merged.ouraData, false);
+    }
+    if ((local.updatedAt || 0) > remoteAt) {
+      await pushNow(merged);
     }
   } else {
-    await pushNow(store.get().plan);
+    await pushNow(local);
   }
   await pullBehavior();
   store.setSync('ok');
@@ -86,17 +112,25 @@ async function pushNow(plan: PlanState): Promise<void> {
   const s = await ensureSession();
   if (!s) return;
   store.setSync('syncing');
+  const payload = planForCloud(plan);
   const { error } = await supa().from('plan_state').upsert(
-    { user_id: s.user.id, data: planForCloud(plan), updated_at: new Date().toISOString() },
+    { user_id: s.user.id, data: payload, updated_at: new Date().toISOString() },
     { onConflict: 'user_id' },
   );
-  store.setSync(error ? 'err' : 'ok');
+  store.setSync(error ? 'err' : 'ok', s.user.email ?? null);
 }
 
 export function schedulePush(plan: PlanState) {
   if (!hasSupabase()) return;
   if (pushTimer) clearTimeout(pushTimer);
-  pushTimer = setTimeout(() => { void pushNow(plan); }, 1500);
+  pushTimer = setTimeout(() => { void pushNow(plan); }, 800);
+}
+
+/** Immediate push — used after check-offs so other devices see it fast. */
+export function flushPush() {
+  if (pushTimer) clearTimeout(pushTimer);
+  const plan = store.get().plan;
+  void pushNow(plan);
 }
 
 /* ---------------- API keys (write-only via RLS) ---------------- */
@@ -117,6 +151,19 @@ export async function saveSecrets(secrets: { oura?: string; gemini?: string; gro
   return { error: error?.message ?? null };
 }
 
+export async function migrateLocalSecrets(): Promise<void> {
+  const s = await ensureSession();
+  if (!s) return;
+  const lk = getLocalKeys();
+  if (!lk.oura && !lk.gemini && !lk.groq && !lk.github) return;
+  await saveSecrets({
+    ...(lk.oura && { oura: lk.oura }),
+    ...(lk.gemini && { gemini: lk.gemini }),
+    ...(lk.groq && { groq: lk.groq }),
+    ...(lk.github && { github: lk.github }),
+  });
+}
+
 export async function secretsStatus(): Promise<{ oura: boolean; gemini: boolean; groq: boolean; github: boolean }> {
   const none = { oura: false, gemini: false, groq: false, github: false };
   const s = await ensureSession();
@@ -132,17 +179,25 @@ export function initSync() {
   store.onPlanChange = schedulePush;
   if (!hasSupabase()) { store.setSync('local'); return; }
   supa().auth.onAuthStateChange((_e, session) => {
-    if (session) { void pullPlan(); }
-    else store.setSync('local', null);
+    if (session) {
+      void (async () => {
+        await migrateLocalSecrets();
+        await pullPlan();
+      })();
+    } else store.setSync('local', null);
   });
   void (async () => {
     const s = await ensureSession();
     if (s) {
       store.setSync('syncing', s.user.email ?? null);
+      await migrateLocalSecrets();
       await pullPlan();
     } else {
       store.setSync('local', null);
     }
   })();
   window.addEventListener('focus', () => { void pullPlan(); });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') void pullPlan();
+  });
 }

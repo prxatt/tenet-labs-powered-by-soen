@@ -1,21 +1,21 @@
 import { useEffect, useState } from 'react';
 import type { Block, Recipe } from '../core/types';
-import { CAMP0, CAMP_END, DN, addD, clampToCamp, key } from '../core/dates';
+import { clampToCamp, key } from '../core/dates';
 import { getOuraError, syncOura } from '../core/api';
 import { gymVisitsThisWeek, recordGeoSample } from '../core/geoLocal';
 import { refreshBehavior } from '../core/habits';
 import { initSync } from '../core/sync';
 import { store } from '../core/store';
-import { useApp, toast } from './hooks';
+import { useApp } from './hooks';
+import { useTouchDevice } from './hooks/useTouchDevice';
 import Loader from './Loader';
 import Toast from './Toast';
 import CommandDock from './CommandDock';
 import GreetingBar from './GreetingBar';
 import LiveChip from './LiveChip';
+import SyncBanner from './SyncBanner';
 import SoenModal from './SoenModal';
-import DayView from './rhythm/DayView';
-import WeekView from './rhythm/WeekView';
-import MonthView from './rhythm/MonthView';
+import PlanPage, { RhythmPage, type PlanSeg } from './PlanPage';
 import FuelPage from './fuel/FuelPage';
 import RoadmapPage from './roadmap/RoadmapPage';
 import EventSheet from './sheets/EventSheet';
@@ -24,26 +24,30 @@ import AskSheet from './sheets/AskSheet';
 import SettingsSheet from './sheets/SettingsSheet';
 import RecipeSheet from './sheets/RecipeSheet';
 import ShotListSheet from './sheets/ShotListSheet';
-import { IcWave, IcFuel, IcRoad } from './Icons';
+import { IcWave, IcFuel, IcRoad, IcCal } from './Icons';
 
 export type SheetReq =
   | { type: 'event'; block: Block; shownOn: string }
   | { type: 'log' } | { type: 'settings' } | { type: 'ask'; prefill?: string } | { type: 'retune' }
   | { type: 'shot' } | { type: 'recipe'; recipe: Recipe };
 
-type Tab = 'rhythm' | 'fuel' | 'roadmap';
-type Seg = 'day' | 'week' | 'month';
+type Tab = 'rhythm' | 'plan' | 'fuel' | 'roadmap';
 
 export default function App() {
   const app = useApp();
+  const touch = useTouchDevice();
   const [loaded, setLoaded] = useState(false);
   const [tab, setTab] = useState<Tab>('rhythm');
-  const [seg, setSeg] = useState<Seg>('day');
+  const [seg, setSeg] = useState<PlanSeg>('day');
   const [cur, setCur] = useState<Date>(() => clampToCamp(new Date()));
   const [sheet, setSheet] = useState<SheetReq | null>(null);
   const [soenQ, setSoenQ] = useState<string | null>(null);
   const [atGym, setAtGym] = useState(false);
   const ouraErr = getOuraError();
+
+  useEffect(() => {
+    setTab(touch ? 'rhythm' : 'plan');
+  }, [touch]);
 
   useEffect(() => {
     initSync();
@@ -71,15 +75,14 @@ export default function App() {
     return () => clearInterval(iv);
   }, [app.plan.prefs.gymLoc, app.plan.prefs.homeLoc]);
 
-  const goToDate = (d: Date) => { setCur(clampToCamp(d)); setTab('rhythm'); setSeg('day'); };
+  const goToDate = (d: Date) => {
+    setCur(clampToCamp(d));
+    setSeg('day');
+    setTab(touch ? 'plan' : 'plan');
+  };
   const openSheet = (s: SheetReq) => setSheet(s);
   const isGymDay = [1, 3, 4, 5].includes(new Date().getDay());
-
-  const dayChips = (() => {
-    const out: Date[] = [];
-    for (let d = new Date(CAMP0); d <= CAMP_END; d = addD(d, 1)) out.push(new Date(d));
-    return out;
-  })();
+  const today = clampToCamp(new Date());
 
   return (
     <>
@@ -95,6 +98,7 @@ export default function App() {
         </div>
 
         <GreetingBar tab={tab} />
+        <SyncBanner onSettings={() => openSheet({ type: 'settings' })} />
 
         {atGym && isGymDay && (
           <div id="gymBanner">
@@ -108,45 +112,22 @@ export default function App() {
         )}
 
         <div className="tabs">
-          <button className={'tab' + (tab === 'rhythm' ? ' on' : '')} onClick={() => setTab('rhythm')}><IcWave />Rhythm</button>
+          {touch && (
+            <button className={'tab' + (tab === 'rhythm' ? ' on' : '')} onClick={() => setTab('rhythm')}><IcWave />Rhythm</button>
+          )}
+          <button className={'tab tab-plan' + (tab === 'plan' ? ' on' : '')} onClick={() => setTab('plan')}><IcCal />Plan</button>
           <button className={'tab' + (tab === 'fuel' ? ' on' : '')} onClick={() => setTab('fuel')}><IcFuel />Fuel</button>
           <button className={'tab' + (tab === 'roadmap' ? ' on' : '')} onClick={() => setTab('roadmap')}><IcRoad />Roadmap</button>
         </div>
 
         <div className={'view' + (tab === 'rhythm' ? ' on' : '')}>
-          {tab === 'rhythm' && (
-            <>
-              <div className="segwrap">
-                <div className="seg">
-                  {(['day', 'week', 'month'] as Seg[]).map(s => (
-                    <button key={s} className={seg === s ? 'on' : ''} onClick={() => setSeg(s)}>{s[0].toUpperCase() + s.slice(1)}</button>
-                  ))}
-                </div>
-              </div>
-              {seg === 'day' && (
-                <div className="dstrip">
-                  <button className="navb" onClick={() => setCur(c => clampToCamp(addD(c, -1)))}>‹</button>
-                  <div className="dchips">
-                    {dayChips.map(d => {
-                      const k = key(d);
-                      const on = k === key(cur);
-                      const hasCustom = (app.plan.custom[k] || []).length > 0;
-                      return (
-                        <div key={k} className={'dchip' + (on ? ' on' : '')} role="button" aria-label={'go to ' + k} onClick={() => setCur(new Date(d))}
-                          ref={el => { if (on && el) el.scrollIntoView({ inline: 'center', block: 'nearest' }); }}>
-                          <small>{DN[d.getDay()]}</small><b>{d.getDate()}</b>
-                          {hasCustom && <div className="dot" />}
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <button className="navb" onClick={() => setCur(c => clampToCamp(addD(c, 1)))}>›</button>
-                </div>
-              )}
-              {seg === 'day' && <DayView cur={cur} openSheet={openSheet} />}
-              {seg === 'week' && <WeekView cur={cur} openSheet={openSheet} />}
-              {seg === 'month' && <MonthView cur={cur} onPick={d => { setCur(d); setSeg('day'); }} />}
-            </>
+          {tab === 'rhythm' && touch && <RhythmPage cur={today} openSheet={openSheet} />}
+        </div>
+        <div className={'view' + (tab === 'plan' ? ' on' : '')}>
+          {tab === 'plan' && (
+            <div className="plan-shell">
+              <PlanPage cur={cur} seg={seg} setSeg={setSeg} setCur={setCur} openSheet={openSheet} calendarOnly={touch} />
+            </div>
           )}
         </div>
         <div className={'view' + (tab === 'fuel' ? ' on' : '')}>{tab === 'fuel' && <FuelPage openSheet={openSheet} />}</div>
