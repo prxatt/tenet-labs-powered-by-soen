@@ -1,15 +1,15 @@
 /**
  * Outbound API calls: AI (Ollama → serverless Groq/Gemini → local-key fallback)
- * and Oura sync (serverless proxy → local-key fallback).
+ * and Oura sync (authenticated serverless only).
  */
 import type { OuraDay, Recipe } from './types';
 import { key, addD } from './dates';
 import { store } from './store';
 import { ensureSession, hasSupabase } from './sync';
 import { parseRecipe, recipeImportPrompt } from './ai';
-import { getOuraOAuth, ouraRedirectUri, setOuraOAuth, type OuraTokens } from './ouraOAuth';
+import { getOuraOAuth, ouraRedirectUri, setOuraOAuth } from './ouraOAuth';
 
-/* ---- local fallback keys (used only when not signed into the backend) ---- */
+/* ---- local fallback keys (AI only when not signed in) ---- */
 const LS_KEYS = 'tl7_keys';
 export interface LocalKeys { oura?: string; gemini?: string; groq?: string; github?: string; }
 export function getLocalKeys(): LocalKeys {
@@ -17,19 +17,24 @@ export function getLocalKeys(): LocalKeys {
 }
 export function setLocalKeys(k: LocalKeys) {
   const clean = { ...k };
-  if (clean.oura) clean.oura = clean.oura.replace(/\s+/g, '');
+  delete clean.oura;
   localStorage.setItem(LS_KEYS, JSON.stringify({ ...getLocalKeys(), ...clean }));
 }
 
 export function hasOuraConnected(): boolean {
-  return !!(getOuraOAuth()?.access_token || getLocalKeys().oura);
+  return !!getOuraOAuth()?.access_token;
 }
 
 export async function exchangeOuraCode(code: string): Promise<{ ok: boolean; error?: string }> {
+  const s = await ensureSession();
+  if (!s) return { ok: false, error: 'sign_in_required' };
   try {
     const r = await fetch('/api/soen', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer ' + s.access_token,
+      },
       body: JSON.stringify({
         service: 'oura_oauth_exchange',
         code,
@@ -41,55 +46,13 @@ export async function exchangeOuraCode(code: string): Promise<{ ok: boolean; err
     if (!data.access_token) return { ok: false, error: 'no_token' };
     setOuraOAuth({
       access_token: data.access_token,
-      refresh_token: data.refresh_token,
+      refresh_token: data.refresh_token || '',
       expires_at: Date.now() + (Number(data.expires_in) || 86400) * 1000,
     });
-    const s = await ensureSession();
-    if (s) {
-      await import('./sync').then(m => m.saveSecrets({
-        oura: data.access_token,
-        ...(data.refresh_token && { ouraRefresh: data.refresh_token }),
-      }));
-    }
     return { ok: true };
   } catch {
     return { ok: false, error: 'network' };
   }
-}
-
-async function refreshOuraAccess(): Promise<string | null> {
-  const o = getOuraOAuth();
-  if (!o?.refresh_token) return null;
-  try {
-    const r = await fetch('/api/soen', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ service: 'oura_refresh', refresh_token: o.refresh_token }),
-    });
-    const data = await r.json().catch(() => ({}));
-    if (!data.access_token) return null;
-    const next: OuraTokens = {
-      access_token: data.access_token,
-      refresh_token: data.refresh_token || o.refresh_token,
-      expires_at: Date.now() + (Number(data.expires_in) || 86400) * 1000,
-    };
-    setOuraOAuth(next);
-    return next.access_token;
-  } catch {
-    return null;
-  }
-}
-
-export async function resolveOuraAccessToken(): Promise<string | null> {
-  const oauth = getOuraOAuth();
-  if (oauth) {
-    if (Date.now() < oauth.expires_at - 120_000) return oauth.access_token;
-    const refreshed = await refreshOuraAccess();
-    if (refreshed) return refreshed;
-  }
-  const legacy = getLocalKeys().oura?.trim();
-  if (legacy) return legacy;
-  return oauth?.access_token || null;
 }
 
 export interface ServerResult {
@@ -97,22 +60,6 @@ export interface ServerResult {
   data?: Record<string, unknown>;
   error?: string;
   status?: number;
-}
-
-async function ouraProxyCall(tok: string, start: string, end: string): Promise<ServerResult> {
-  try {
-    const r = await fetch('/api/soen', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ service: 'oura_proxy', oura_token: tok, start, end }),
-    });
-    const data = await r.json().catch(() => ({}));
-    if (data.error) return { ok: false, error: String(data.error), data };
-    if (data.readiness || data.dailySleep || data.activity || data.sleep) return { ok: true, data };
-    return { ok: false, error: 'oura_empty' };
-  } catch {
-    return { ok: false, error: 'network' };
-  }
 }
 
 async function serverCall(body: Record<string, unknown>): Promise<ServerResult> {
@@ -201,21 +148,26 @@ export async function importRecipe(opts: { url?: string; imageBase64?: string; h
 
 /* ---------------- Oura ---------------- */
 
-function mergeOura(target: Record<string, OuraDay>, payload: any): Record<string, OuraDay> {
+function mergeOura(target: Record<string, OuraDay>, payload: Record<string, unknown>): Record<string, OuraDay> {
   const out = { ...target };
   const day = (d: string): OuraDay => (out[d] = { ...(out[d] || {}) });
-  (payload.readiness?.data || []).forEach((x: any) => { day(x.day).r = x.score; });
-  (payload.dailySleep?.data || []).forEach((x: any) => { day(x.day).s = x.score; });
-  (payload.sleep?.data || []).forEach((x: any) => {
+  const readiness = payload.readiness as { data?: Array<{ day: string; score: number }> } | undefined;
+  const dailySleep = payload.dailySleep as { data?: Array<{ day: string; score: number }> } | undefined;
+  const sleep = payload.sleep as { data?: Array<{ day: string; average_hrv?: number; lowest_heart_rate?: number; average_breath?: number }> } | undefined;
+  const activity = payload.activity as { data?: Array<{ day: string; score: number; steps: number; total_calories: number }> } | undefined;
+  const stress = payload.stress as { data?: Array<{ day: string; day_summary: string }> } | undefined;
+  (readiness?.data || []).forEach(x => { day(x.day).r = x.score; });
+  (dailySleep?.data || []).forEach(x => { day(x.day).s = x.score; });
+  (sleep?.data || []).forEach(x => {
     const o = day(x.day);
     if (x.average_hrv) o.hrv = Math.round(x.average_hrv);
     if (x.lowest_heart_rate) o.rhr = x.lowest_heart_rate;
     if (x.average_breath) o.br = Math.round(x.average_breath * 10) / 10;
   });
-  (payload.activity?.data || []).forEach((x: any) => {
+  (activity?.data || []).forEach(x => {
     const o = day(x.day); o.act = x.score; o.steps = x.steps; o.cal = x.total_calories;
   });
-  (payload.stress?.data || []).forEach((x: any) => {
+  (stress?.data || []).forEach(x => {
     day(x.day).st = x.day_summary === 'stressful' ? 2 : x.day_summary === 'normal' ? 1 : 0;
   });
   return out;
@@ -227,10 +179,7 @@ let lastOuraError: string | null = null;
 let lastOuraErrorAt = 0;
 
 export function getOuraError(): string | null {
-  if (lastOuraError && Date.now() - lastOuraErrorAt < 300000) {
-    if (/sign in/i.test(lastOuraError) && getLocalKeys().oura) return null;
-    return lastOuraError;
-  }
+  if (lastOuraError && Date.now() - lastOuraErrorAt < 300000) return lastOuraError;
   return null;
 }
 
@@ -243,34 +192,32 @@ export async function syncOura(): Promise<OuraSyncResult> {
     return 'ok';
   };
 
-  const accessTok = await resolveOuraAccessToken();
-
   const s = await ensureSession();
-  if (s && accessTok) {
-    const srv = await serverCall({ service: 'oura', start, end });
-    if (srv.ok && srv.data) return apply(srv.data);
+  if (!s) {
+    lastOuraError = 'Sign in to sync Oura across devices';
+    lastOuraErrorAt = Date.now();
+    return 'no_auth';
   }
 
-  if (!accessTok) {
-    lastOuraError = 'Connect Oura in Settings';
+  const srv = await serverCall({ service: 'oura', start, end });
+  if (srv.ok && srv.data) return apply(srv.data);
+
+  if (srv.error === 'no_token') {
+    lastOuraError = 'Connect Oura in Settings (sign in first)';
     lastOuraErrorAt = Date.now();
     return 'nokey';
   }
-
-  const proxy = await ouraProxyCall(accessTok, start, end);
-  if (proxy.ok && proxy.data) return apply(proxy.data);
-
-  if (proxy.error === 'oura_rejected') {
-    lastOuraError = 'Oura connection expired — tap Connect with Oura again';
+  if (srv.error === 'oura_rejected') {
+    lastOuraError = 'Oura session expired — tap Connect with Oura again';
     lastOuraErrorAt = Date.now();
     return 'oura_api_error';
   }
-  if (proxy.error === 'oura_empty') {
+  if (srv.error === 'oura_empty') {
     lastOuraError = 'No Oura data yet — ring may still be syncing';
     lastOuraErrorAt = Date.now();
     return 'err';
   }
-  if (proxy.error === 'network') {
+  if (srv.error === 'network') {
     lastOuraError = 'Network error';
     lastOuraErrorAt = Date.now();
     return 'network';

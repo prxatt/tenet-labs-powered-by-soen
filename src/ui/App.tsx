@@ -22,6 +22,8 @@ import EventSheet from './sheets/EventSheet';
 import LogSheet from './sheets/LogSheet';
 import AskSheet from './sheets/AskSheet';
 import SettingsSheet from './sheets/SettingsSheet';
+import SyncBanner from './SyncBanner';
+import SyncStatus from './SyncStatus';
 import RecipeSheet from './sheets/RecipeSheet';
 import ShotListSheet from './sheets/ShotListSheet';
 import { IcWave, IcFuel, IcRoad, IcCal } from './Icons';
@@ -59,6 +61,7 @@ export default function App() {
         const r = await exchangeOuraCode(cb.code);
         clearOuraCallbackUrl();
         if (r.ok) { toast('Oura connected ✓'); await syncOura(); }
+        else if (r.error === 'sign_in_required') toast('Sign in first, then connect Oura');
         else toast('Oura connect failed — check Vercel OURA_CLIENT_ID/SECRET');
       })();
     } else {
@@ -108,10 +111,13 @@ export default function App() {
         <div className="top">
           <div className="brand">TENET LABS<small>POWERED BY SOEN</small></div>
           <div className="right">
+            <SyncStatus />
             <LiveChip atGym={atGym} ouraError={ouraErr} />
             <button className="ava" onClick={() => openSheet({ type: 'settings' })}>P</button>
           </div>
         </div>
+
+        <SyncBanner onSettings={() => openSheet({ type: 'settings' })} />
 
         <GreetingBar tab={tab} />
 

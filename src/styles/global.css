@@ -125,6 +125,16 @@ h1.plan{font-size:1.9rem;font-weight:600;margin-top:12px}
 .dscroll-hint span:nth-child(2){width:22px;opacity:.7}
 .sync-banner{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:8px;padding:10px 12px;border-radius:14px;background:var(--amberbg);border:1px solid rgba(232,161,60,.25);font-size:.68rem;color:#7a5510}
 .sync-banner button{border:0;background:var(--ink);color:#fff;font-weight:800;font-size:.64rem;padding:7px 12px;border-radius:100px;cursor:pointer;flex:0 0 auto}
+.sync-banner-offline{background:var(--subbg);border-color:rgba(0,0,0,.08);color:var(--sub)}
+.sync-banner-conflict{background:rgba(100,149,237,.12);border-color:rgba(100,149,237,.25);color:#2a4a7a}
+.sync-banner-err{background:rgba(220,80,80,.1);border-color:rgba(220,80,80,.25);color:#8a2020}
+.sync-dot{display:inline-block;width:8px;height:8px;border-radius:50%;flex:0 0 auto}
+.sync-dot-local{background:var(--sub);opacity:.5}
+.sync-dot-syncing{background:var(--amber);animation:syncPulse 1s ease infinite}
+.sync-dot-ok{background:var(--green)}
+.sync-dot-err{background:var(--red)}
+.sync-dot-conflict{background:#6495ed}
+@keyframes syncPulse{0%,100%{opacity:1}50%{opacity:.4}}
 .rhythm-dash{display:flex;flex-direction:column;gap:12px;margin-top:4px}
 .greeting-bar-rhythm{margin-bottom:2px}
 .greeting-ring-lg{width:40px;height:40px;flex:0 0 40px}

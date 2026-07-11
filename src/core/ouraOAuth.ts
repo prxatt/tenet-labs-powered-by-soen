@@ -30,7 +30,10 @@ export function ouraRedirectUri(): string {
   return window.location.origin + '/oauth/oura';
 }
 
-export function startOuraConnect(): void {
+export async function startOuraConnect(): Promise<void> {
+  const { ensureSession } = await import('./sync');
+  const session = await ensureSession();
+  if (!session) throw new Error('Sign in first — Oura sync requires your account');
   const clientId = import.meta.env.VITE_OURA_CLIENT_ID as string;
   if (!clientId) {
     throw new Error('Oura app not configured — add OURA_CLIENT_ID in Vercel');

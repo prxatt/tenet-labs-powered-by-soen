@@ -9,7 +9,7 @@ import { emptyPlanState } from './types';
 export interface AppState {
   plan: PlanState;
   oura: Record<string, OuraDay>;
-  sync: 'local' | 'syncing' | 'ok' | 'err';
+  sync: 'local' | 'syncing' | 'ok' | 'err' | 'conflict';
   email: string | null;
 }
 

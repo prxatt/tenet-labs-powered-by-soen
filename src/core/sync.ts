@@ -8,11 +8,13 @@ import { store } from './store';
 import { pullBehavior } from './habits';
 import { getLocalKeys } from './api';
 import { getOuraOAuth } from './ouraOAuth';
+import { mergePlans } from './merge';
 
 const URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const ANON = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 
 let client: SupabaseClient | null = null;
+let lastRemoteAt = 0;
 
 export function hasSupabase(): boolean { return !!(URL && ANON); }
 
@@ -81,29 +83,6 @@ export async function signInMagic(email: string): Promise<{ error: string | null
 
 export async function signOut() { if (hasSupabase()) await supa().auth.signOut(); }
 
-/* ---------------- plan merge (done keys union across devices) ---------------- */
-
-function mergePlans(local: PlanState, remote: PlanState, remoteAt: number): PlanState {
-  const localAt = local.updatedAt || 0;
-  const done = { ...remote.done, ...local.done };
-  if (remoteAt > localAt) {
-    return {
-      ...remote,
-      done,
-      todos: { ...local.todos, ...remote.todos },
-      ouraData: remote.ouraData || local.ouraData,
-      updatedAt: remoteAt,
-    };
-  }
-  return {
-    ...local,
-    done,
-    todos: { ...remote.todos, ...local.todos },
-    ouraData: local.ouraData || remote.ouraData,
-    updatedAt: Math.max(localAt, remoteAt),
-  };
-}
-
 /* ---------------- plan state sync ---------------- */
 
 let pushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -123,8 +102,10 @@ export async function pullPlan(): Promise<void> {
   if (data?.data) {
     const remote = data.data as PlanState;
     const remoteAt = remote.updatedAt || new Date(data.updated_at).getTime();
-    const merged = mergePlans(local, remote, remoteAt);
+    lastRemoteAt = remoteAt;
+    const { plan: merged, hadConflict } = mergePlans(local, remote, remoteAt);
     store.replacePlan(merged);
+    if (hadConflict) store.setSync('conflict', s.user.email ?? null);
     if (merged.ouraData && Object.keys(merged.ouraData).length) {
       store.setOura(merged.ouraData, false);
     }
@@ -135,19 +116,35 @@ export async function pullPlan(): Promise<void> {
     await pushNow(local);
   }
   await pullBehavior();
-  store.setSync('ok');
+  if (store.get().sync !== 'conflict') store.setSync('ok');
 }
 
 async function pushNow(plan: PlanState): Promise<void> {
   const s = await ensureSession();
   if (!s) return;
   store.setSync('syncing');
-  const payload = planForCloud(plan);
+  let payload = planForCloud(plan);
+
+  const { data: remote } = await supa()
+    .from('plan_state').select('data, updated_at').eq('user_id', s.user.id).maybeSingle();
+  if (remote?.data) {
+    const remotePlan = remote.data as PlanState;
+    const remoteAt = remotePlan.updatedAt || new Date(remote.updated_at).getTime();
+    if (remoteAt > lastRemoteAt && remoteAt > (plan.updatedAt || 0) - 500) {
+      const { plan: merged, hadConflict } = mergePlans(plan, remotePlan, remoteAt);
+      payload = planForCloud(merged);
+      store.replacePlan(merged);
+      if (hadConflict) store.setSync('conflict', s.user.email ?? null);
+    }
+    lastRemoteAt = remoteAt;
+  }
+
   const { error } = await supa().from('plan_state').upsert(
     { user_id: s.user.id, data: payload, updated_at: new Date().toISOString() },
     { onConflict: 'user_id' },
   );
-  store.setSync(error ? 'err' : 'ok', s.user.email ?? null);
+  if (!error && store.get().sync !== 'conflict') store.setSync('ok', s.user.email ?? null);
+  else if (error) store.setSync('err', s.user.email ?? null);
 }
 
 export function schedulePush(plan: PlanState) {
@@ -165,7 +162,9 @@ export function flushPush() {
 
 /* ---------------- API keys (write-only via RLS) ---------------- */
 
-export async function saveSecrets(secrets: { oura?: string; ouraRefresh?: string; gemini?: string; groq?: string; github?: string }): Promise<{ error: string | null }> {
+export async function saveSecrets(secrets: {
+  oura?: string; ouraRefresh?: string; gemini?: string; groq?: string; github?: string;
+}): Promise<{ error: string | null }> {
   const s = await ensureSession();
   if (!s) return { error: 'Not signed in — open your magic link on this device, then try again' };
   const patch: Record<string, string> = {};
@@ -186,13 +185,18 @@ export async function migrateLocalSecrets(): Promise<void> {
   const s = await ensureSession();
   if (!s) return;
   const lk = getLocalKeys();
-  if (!lk.gemini && !lk.groq && !lk.github && (!lk.oura || !!getOuraOAuth())) return;
-  await saveSecrets({
-    ...(lk.oura && !getOuraOAuth() && { oura: lk.oura }),
-    ...(lk.gemini && { gemini: lk.gemini }),
-    ...(lk.groq && { groq: lk.groq }),
-    ...(lk.github && { github: lk.github }),
-  });
+  const oauth = getOuraOAuth();
+  const patch: Parameters<typeof saveSecrets>[0] = {};
+  if (oauth?.access_token) {
+    patch.oura = oauth.access_token;
+    if (oauth.refresh_token) patch.ouraRefresh = oauth.refresh_token;
+  } else if (lk.oura && !oauth) {
+    patch.oura = lk.oura;
+  }
+  if (lk.gemini) patch.gemini = lk.gemini;
+  if (lk.groq) patch.groq = lk.groq;
+  if (lk.github) patch.github = lk.github;
+  if (Object.keys(patch).length) await saveSecrets(patch);
 }
 
 export async function secretsStatus(): Promise<{ oura: boolean; gemini: boolean; groq: boolean; github: boolean }> {

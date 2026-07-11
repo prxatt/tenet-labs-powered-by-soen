@@ -61,6 +61,7 @@ export default function SettingsSheet({ onClose }: { onClose: () => void }) {
     if (r === 'ok') return 'Oura synced ✓';
     if (r === 'oura_api_error') return 'Oura session expired — tap Connect with Oura again';
     if (r === 'nokey') return 'Tap Connect with Oura first';
+    if (r === 'no_auth') return 'Sign in first to sync Oura';
     if (r === 'err') return 'No Oura data yet — try again later';
     if (r === 'network') return 'No network';
     return 'Could not sync Oura';
@@ -151,54 +152,21 @@ export default function SettingsSheet({ onClose }: { onClose: () => void }) {
     <Sheet onClose={onClose}>
       <h3 className="serif">Settings</h3>
 
-      {/* ---- Oura first: no account required ---- */}
-      <div className="sec sec-oura">
-        <h6>OURA</h6>
-        <p style={{ fontSize: '.68rem', color: 'var(--sub)', marginBottom: 8 }}>
-          Oura removed personal tokens in 2025 — tap <b>Connect with Oura</b> to sign in with your Oura account.
-          {have.oura ? <span style={{ color: 'var(--green)', fontWeight: 800 }}> Connected{K(true)}</span> : null}
-        </p>
-        <button className="btnP" onClick={() => {
-          try { startOuraConnect(); } catch (e) { toast(String(e instanceof Error ? e.message : e)); }
-        }}>Connect with Oura</button>
-        <button className="btnS" disabled={ouraBusy} onClick={async () => {
-          setOuraBusy(true);
-          const r = await syncOura();
-          setOuraBusy(false);
-          toast(ouraSyncToast(r));
-          setHave(h => ({ ...h, oura: hasOuraConnected() }));
-        }}>{ouraBusy ? 'Syncing…' : 'Sync Oura now'}</button>
-      </div>
-
-      {/* ---- Other keys ---- */}
-      <div className="sec">
-        <h6>AI &amp; GITHUB KEYS — OPTIONAL</h6>
-        <p style={{ fontSize: '.68rem', color: 'var(--sub)', marginBottom: 6 }}>
-          Gemini{K(have.gemini)} · Groq{K(have.groq)} · GitHub{K(have.github)}
-        </p>
-        <input type="password" placeholder="Gemini key — AIza…" value={gem} onChange={e => setGem(e.target.value)} />
-        <div style={{ height: 8 }} />
-        <input type="password" placeholder="Groq key — gsk_…" value={groq} onChange={e => setGroq(e.target.value)} />
-        <div style={{ height: 8 }} />
-        <input type="password" placeholder="GitHub PAT — ghp_…" value={github} onChange={e => setGithub(e.target.value)} />
-        <button className="btnP" onClick={() => void saveOtherKeys()}>Save AI keys</button>
-      </div>
-
-      {/* ---- Cross-device: clearly optional ---- */}
+      {/* ---- Sign in first (required for Oura + cross-device sync) ---- */}
       <div className="sec sec-sync">
-        <h6>CROSS-DEVICE SYNC — OPTIONAL</h6>
+        <h6>ACCOUNT — REQUIRED FOR SYNC</h6>
         <p style={{ fontSize: '.68rem', color: 'var(--sub)', marginBottom: 8 }}>
-          Only needed so <b>check-offs</b> match on iPhone + iPad + Mac. Oura works without this.
+          Sign in so your <b>plan check-offs</b> and <b>Oura data</b> match on every device.
           {signedIn
             ? <> Signed in as <b>{session?.user.email}</b>.</>
-            : <> Not signed in — check-offs stay on this device only.</>}
+            : <> Not signed in — data stays on this device only.</>}
         </p>
         {!hasSupabase() ? (
           <p style={{ fontSize: '.68rem', color: 'var(--amber)' }}>Cloud not connected on this deploy — ask to link Supabase in Vercel.</p>
         ) : signedIn ? (
           <>
             <p style={{ fontSize: '.68rem', color: 'var(--green)', fontWeight: 700 }}>
-              Cloud sync {app.sync === 'ok' ? 'active ✓' : app.sync === 'syncing' ? 'syncing…' : app.sync}
+              Cloud sync {app.sync === 'ok' ? 'active ✓' : app.sync === 'syncing' ? 'syncing…' : app.sync === 'conflict' ? 'merged ✓' : app.sync}
             </p>
             <button className="btnS" onClick={() => { void signOut(); toast('Signed out'); }}>Sign out</button>
           </>
@@ -218,6 +186,38 @@ export default function SettingsSheet({ onClose }: { onClose: () => void }) {
         )}
       </div>
 
+      {/* ---- Oura (requires sign-in) ---- */}
+      <div className="sec sec-oura">
+        <h6>OURA</h6>
+        <p style={{ fontSize: '.68rem', color: 'var(--sub)', marginBottom: 8 }}>
+          Tap <b>Connect with Oura</b> after signing in. Tokens are stored securely on your account.
+          {have.oura ? <span style={{ color: 'var(--green)', fontWeight: 800 }}> Connected{K(true)}</span> : null}
+        </p>
+        <button className="btnP" disabled={!signedIn} onClick={() => {
+          void startOuraConnect().catch(e => toast(String(e instanceof Error ? e.message : e)));
+        }}>{signedIn ? 'Connect with Oura' : 'Sign in to connect Oura'}</button>
+        <button className="btnS" disabled={ouraBusy || !signedIn} onClick={async () => {
+          setOuraBusy(true);
+          const r = await syncOura();
+          setOuraBusy(false);
+          toast(ouraSyncToast(r));
+          if (signedIn) void secretsStatus().then(s => setHave(h => ({ ...h, oura: s.oura })));
+        }}>{ouraBusy ? 'Syncing…' : 'Sync Oura now'}</button>
+      </div>
+
+      {/* ---- Cross-device: clearly optional ---- */}
+      <div className="sec">
+        <h6>AI &amp; GITHUB KEYS — OPTIONAL</h6>
+        <p style={{ fontSize: '.68rem', color: 'var(--sub)', marginBottom: 6 }}>
+          Gemini{K(have.gemini)} · Groq{K(have.groq)} · GitHub{K(have.github)}
+        </p>
+        <input type="password" placeholder="Gemini key — AIza…" value={gem} onChange={e => setGem(e.target.value)} />
+        <div style={{ height: 8 }} />
+        <input type="password" placeholder="Groq key — gsk_…" value={groq} onChange={e => setGroq(e.target.value)} />
+        <div style={{ height: 8 }} />
+        <input type="password" placeholder="GitHub PAT — ghp_…" value={github} onChange={e => setGithub(e.target.value)} />
+        <button className="btnP" onClick={() => void saveOtherKeys()}>Save AI keys</button>
+      </div>
       <div className="sec"><h6>Local AI — Ollama</h6>
         <div className="two">
           <select value={ollamaModel} onChange={e => setOllamaModel(e.target.value)} style={{ width: '100%' }}>

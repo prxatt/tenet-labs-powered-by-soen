@@ -1,10 +1,7 @@
--- ============================================================
--- Tenet Labs · SOEN — ONE FILE SETUP (run this entire file once)
--- Supabase Dashboard → SQL Editor → New query → paste → Run
--- After success, Table Editor should show: plan_state, user_secrets, behavior_insights
--- ============================================================
+-- Tenet Labs · SOEN — canonical schema (versioned migrations)
+-- Run via Supabase CLI or SQL Editor in order.
 
--- plan_state: your schedule, check-offs, recipes (one row per user)
+-- plan_state: schedule, check-offs, recipes (one row per user)
 create table if not exists public.plan_state (
   user_id uuid primary key references auth.users(id) on delete cascade,
   data jsonb not null default '{}'::jsonb,
@@ -18,19 +15,17 @@ create policy "plan_state owner insert" on public.plan_state for insert with che
 drop policy if exists "plan_state owner update" on public.plan_state;
 create policy "plan_state owner update" on public.plan_state for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
--- user_secrets: API keys (write-only from app; server reads them)
+-- user_secrets: API keys (write-only from app; server reads via service role)
 create table if not exists public.user_secrets (
   user_id uuid primary key references auth.users(id) on delete cascade,
   oura_token text,
+  oura_refresh_token text,
+  oura_token_expires_at timestamptz,
   gemini_key text,
   groq_key text,
   github_token text,
-  oura_refresh_token text,
-  oura_token_expires_at timestamptz,
   updated_at timestamptz not null default now()
 );
-alter table public.user_secrets add column if not exists oura_refresh_token text;
-alter table public.user_secrets add column if not exists oura_token_expires_at timestamptz;
 alter table public.user_secrets enable row level security;
 drop policy if exists "secrets owner insert" on public.user_secrets;
 create policy "secrets owner insert" on public.user_secrets for insert with check (auth.uid() = user_id);
